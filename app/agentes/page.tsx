@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { api } from '../../src/lib/api';
+
+import React, { useState, useEffect } from "react";
+import { api } from "../../src/lib/api";
 
 type Agent = {
   id: string;
@@ -14,25 +15,28 @@ type Agent = {
   active: boolean;
 };
 
+const EMPTY_FORM: Partial<Agent> = {
+  name: "",
+  function: "chat",
+  model: "openrouter/auto",
+  workspace: "/root/.openclaw/workspace",
+  apiKeys: "",
+  skills: "",
+  heartbeat: 60,
+  active: true,
+};
+
 export default function AgentesPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Form state
-  const [form, setForm] = useState<Partial<Agent>>({
-    name: '',
-    function: '',
-    model: 'openrouter/auto',
-    workspace: '/root/.openclaw/workspace',
-    apiKeys: '',
-    skills: '',
-    heartbeat: 60,
-    active: true,
-  });
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [form, setForm] = useState<Partial<Agent>>(EMPTY_FORM);
 
   useEffect(() => {
     loadAgents();
@@ -41,119 +45,92 @@ export default function AgentesPage() {
 
   const loadModels = async () => {
     try {
-      const modelList = await (api as any).getModels?.();
+      const modelList = await (
+        api as Record<string, Function>
+      ).getModels?.();
       if (Array.isArray(modelList) && modelList.length > 0) {
         setModels(modelList);
       }
-    } catch (err) {
-      console.error('Error loading models:', err);
+    } catch {
+      /* silent */
     }
   };
 
   const loadAgents = async () => {
     setLoading(true);
     try {
-      // Get sessions and cron jobs
-      let sessionsResult: any = null;
-      let cronResult: any = null;
-      
-      try {
-        sessionsResult = await (api as any).getSessions?.(50);
-      } catch (e: any) {
-        console.error('Sessions error:', e);
-      }
-      
-      try {
-        cronResult = await (api as any).getCronJobs?.();
-      } catch (e: any) {
-        console.error('Cron error:', e);
-      }
-      
-      console.log('[Agentes] Sessions result:', sessionsResult);
-      console.log('[Agentes] Cron result:', cronResult);
-      
-      // Get active cron job IDs - handle different response structures
+      const [sessionsResult, cronResult] = await Promise.all([
+        (api as Record<string, Function>).getSessions?.(50).catch(() => null),
+        (api as Record<string, Function>).getCronJobs?.().catch(() => null),
+      ]);
+
       let activeCronIds: string[] = [];
-      
-      // Try to get jobs from different possible paths
-      let jobs: any[] = [];
-      if (cronResult) {
-        if (Array.isArray(cronResult)) {
-          jobs = cronResult;
-        } else if (cronResult.jobs) {
-          jobs = Array.isArray(cronResult.jobs) ? cronResult.jobs : [];
-        } else if (cronResult.details?.jobs) {
-          jobs = cronResult.details.jobs;
-        }
+      if (cronResult && typeof cronResult === "object") {
+        const c = cronResult as Record<string, unknown>;
+        const jobs = Array.isArray(c.jobs) ? c.jobs : [];
+        activeCronIds = jobs
+          .filter((j: Record<string, unknown>) => j.enabled)
+          .map((j: Record<string, unknown>) => j.id as string);
       }
-      
-      console.log('[Agentes] Jobs found:', jobs);
-      activeCronIds = jobs.filter((j: any) => j.enabled).map((j: any) => j.id);
-      console.log('[Agentes] Active cron IDs:', activeCronIds);
-      
-      // Process sessions
-      let sessions: any[] = [];
+
+      let sessions: Record<string, unknown>[] = [];
       if (Array.isArray(sessionsResult)) {
         sessions = sessionsResult;
-      } else if (sessionsResult && typeof sessionsResult === 'object') {
-        sessions = sessionsResult.sessions || sessionsResult.data || [];
+      } else if (sessionsResult && typeof sessionsResult === "object") {
+        const s = sessionsResult as Record<string, unknown>;
+        sessions = (
+          Array.isArray(s.sessions)
+            ? s.sessions
+            : Array.isArray(s.data)
+              ? s.data
+              : []
+        ) as Record<string, unknown>[];
       }
-      console.log('[Agentes] Sessions loaded:', sessions.length);
-      
-      // Filter: only show active cron jobs or recent sessions
-      sessions = sessions.filter((s: any) => {
-        const keyStr = s.key || '';
-        
-        // If it's a cron session, only show if enabled
-        if (keyStr.includes('cron:')) {
-          const cronId = keyStr.split('cron:').pop() || '';
-          const isValid = activeCronIds.includes(cronId);
-          console.log(`[Agentes] Cron ${cronId}: valid=${isValid}`);
-          return isValid;
+
+      sessions = sessions.filter((s) => {
+        const keyStr = (s.key as string) || "";
+        if (keyStr.includes("cron:")) {
+          const cronId = keyStr.split("cron:").pop() || "";
+          return activeCronIds.includes(cronId);
         }
-        
-        // Regular sessions: show if recently active or less than 24h old
-        const now = Date.now();
-        const updatedAt = s.updatedAt || 0;
-        const age = now - updatedAt;
-        return age < (24 * 60 * 60 * 1000); // less than 24h
+        const updatedAt = (s.updatedAt as number) || 0;
+        return Date.now() - updatedAt < 24 * 60 * 60 * 1000;
       });
-      
-      console.log('[Agentes] Filtered sessions:', sessions.length);
-      
-      if (sessions.length > 0) {
-        const mapped: Agent[] = sessions.map((s: any) => {
-          const keyStr = s.key || '';
-          const isCron = keyStr.includes('cron:');
-          
-          // Extract full cron UUID from key (e.g., "agent:main:cron:72f2175b-2ff5-4ea1-85dc-ab8aadf52d9d")
-          let cronId = '';
-          if (isCron) {
-            const parts = keyStr.split('cron:');
-            cronId = parts[parts.length - 1] || '';
-          }
-          
-          // Active if: cron job is enabled OR session updated < 2 min ago
-          const isActive = isCron 
-            ? activeCronIds.includes(cronId)
-            : (s.updatedAt && (Date.now() - s.updatedAt < 120000));
-          
-          return {
-            id: s.sessionId || s.key || '',
-            name: s.displayName || s.label || s.key || 'Agente',
-            function: s.channel || (isCron ? 'cron' : 'chat'),
-            model: s.model || 'openrouter/auto',
-            workspace: '/root/.openclaw/workspace',
-            apiKeys: '',
-            skills: '',
-            heartbeat: 60,
-            active: isActive,
-          };
-        });
-        setAgents(mapped);
-      }
-    } catch (err) {
-      console.error('Error loading agents:', err);
+
+      const mapped: Agent[] = sessions.map((s) => {
+        const keyStr = (s.key as string) || "";
+        const isCron = keyStr.includes("cron:");
+        let cronId = "";
+        if (isCron) {
+          cronId = keyStr.split("cron:").pop() || "";
+        }
+        const isActive = isCron
+          ? activeCronIds.includes(cronId)
+          : !!(
+            (s.updatedAt as number) &&
+            Date.now() - (s.updatedAt as number) < 120000
+          );
+
+        return {
+          id: (s.sessionId as string) || keyStr,
+          name:
+            (s.displayName as string) ||
+            (s.label as string) ||
+            keyStr ||
+            "Agente",
+          function: (s.channel as string) || (isCron ? "cron" : "chat"),
+          model: (s.model as string) || "openrouter/auto",
+          workspace: "/root/.openclaw/workspace",
+          apiKeys: "",
+          skills: "",
+          heartbeat: 60,
+          active: isActive,
+        };
+      });
+
+      setAgents(mapped);
+    } catch {
+      /* silent */
     }
     setLoading(false);
   };
@@ -164,53 +141,40 @@ export default function AgentesPage() {
     setMessage(null);
 
     try {
-      // In a real implementation, this would call a gateway tool to create/update agent
-      // For now, we simulate success
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setMessage({ type: 'success', text: 'Agente salvo com sucesso!' });
-      
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setMessage({ type: "success", text: "Agente salvo com sucesso!" });
+
       if (!selectedAgent?.id) {
-        // Creating new agent
         const newAgent: Agent = {
           id: `agent:${Date.now()}`,
-          name: form.name || 'Novo Agente',
-          function: form.function || 'chat',
-          model: form.model || 'openrouter/auto',
-          workspace: form.workspace || '/root/.openclaw/workspace',
-          apiKeys: form.apiKeys || '',
-          skills: form.skills || '',
+          name: form.name || "Novo Agente",
+          function: form.function || "chat",
+          model: form.model || "openrouter/auto",
+          workspace: form.workspace || "/root/.openclaw/workspace",
+          apiKeys: form.apiKeys || "",
+          skills: form.skills || "",
           heartbeat: form.heartbeat || 60,
           active: true,
         };
-        setAgents(prev => [...prev, newAgent]);
+        setAgents((prev) => [...prev, newAgent]);
       } else {
-        // Updating existing agent
-        setAgents(prev => prev.map(a => 
-          a.id === selectedAgent.id ? { ...a, ...form } : a
-        ));
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.id === selectedAgent.id ? { ...a, ...form } : a
+          )
+        );
       }
-      
       resetForm();
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Erro ao salvar' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao salvar";
+      setMessage({ type: "error", text: message });
     }
-    
     setSaving(false);
   };
 
   const resetForm = () => {
     setSelectedAgent(null);
-    setForm({
-      name: '',
-      function: '',
-      model: 'openrouter/auto',
-      workspace: '/root/.openclaw/workspace',
-      apiKeys: '',
-      skills: '',
-      heartbeat: 60,
-      active: true,
-    });
+    setForm(EMPTY_FORM);
   };
 
   const editAgent = (agent: Agent) => {
@@ -221,122 +185,112 @@ export default function AgentesPage() {
   const testConnection = async () => {
     setSaving(true);
     setMessage(null);
-    
     try {
-      // Test connection via API
-      await (api as any).getSessionStatus?.();
-      setMessage({ type: 'success', text: 'Conexão testada com sucesso!' });
-    } catch (err: any) {
-      setMessage({ type: 'error', text: `Erro: ${err.message}` });
+      await (api as Record<string, Function>).getSessionStatus?.();
+      setMessage({ type: "success", text: "Conexão OK!" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro";
+      setMessage({ type: "error", text: msg });
     }
-    
     setSaving(false);
   };
 
-  const toggleActive = async (agent: Agent) => {
-    setAgents(prev => prev.map(a => 
-      a.id === agent.id ? { ...a, active: !a.active } : a
-    ));
-    setMessage({ type: 'success', text: `Agente ${agent.active ? 'desativado' : 'ativado'} com sucesso!` });
+  const toggleActive = (agent: Agent) => {
+    setAgents((prev) =>
+      prev.map((a) =>
+        a.id === agent.id ? { ...a, active: !a.active } : a
+      )
+    );
+    setMessage({
+      type: "success",
+      text: `Agente ${agent.active ? "desativado" : "ativado"}`,
+    });
   };
 
   const deleteAgent = async (agent: Agent) => {
-    if (!confirm(`Tem certeza que deseja excluir "${agent.name}"?`)) {
-      return;
-    }
-    
+    if (!confirm(`Excluir "${agent.name}"?`)) return;
     setSaving(true);
     setMessage(null);
-    
     try {
-      const isCron = agent.id.includes('cron:');
-      
+      const isCron = agent.id.includes("cron:");
       if (isCron) {
-        // Extract cron ID from session key
-        const cronId = agent.id.split('cron:').pop();
+        const cronId = agent.id.split("cron:").pop();
         if (cronId) {
-          await (api as any).invokeTool?.('cron', { action: 'remove', jobId: cronId });
-          setMessage({ type: 'success', text: 'Cron job excluído com sucesso!' });
+          await (api as Record<string, Function>).invokeTool?.(
+            "cron",
+            { action: "remove", jobId: cronId }
+          );
         }
-      } else {
-        // For regular sessions, just remove from UI (session will be cleaned up automatically)
-        setMessage({ type: 'success', text: 'Agente removido da lista!' });
       }
-      
-      // Remove from local list
-      setAgents(prev => prev.filter(a => a.id !== agent.id));
-      
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Erro ao excluir' });
+      setAgents((prev) => prev.filter((a) => a.id !== agent.id));
+      setMessage({ type: "success", text: "Agente removido" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao excluir";
+      setMessage({ type: "error", text: msg });
     }
-    
     setSaving(false);
   };
 
   return (
-    <div style={{ padding: 20, color: '#fff' }}>
-      <h1 style={{ marginBottom: 20 }}>Cadastro de Agentes</h1>
+    <div className="mc-agentes">
+      <header className="mc-agentes-header mc-animate-in">
+        <h1 className="mc-agentes-title">Cadastro de Agentes</h1>
+      </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        {/* Left: Agent List */}
-        <div style={{ border: '1px solid #2a2a3e', borderRadius: 8, padding: 16 }}>
-          <h2 style={{ marginBottom: 16 }}>Lista de Agentes</h2>
-          
+      <div className="mc-agentes-layout">
+        {/* ── Left: Agent List ── */}
+        <div className="mc-card-static mc-agentes-list mc-animate-in mc-stagger-1">
+          <h2 className="mc-section-title">
+            Lista de Agentes
+            <span className="mc-agentes-count">{agents.length}</span>
+          </h2>
+
           {loading ? (
-            <p>Carregando...</p>
+            <div className="mc-agentes-skeleton">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="mc-skeleton" style={{ height: 72 }} />
+              ))}
+            </div>
           ) : agents.length === 0 ? (
-            <p>Nenhum agente encontrado</p>
+            <p className="mc-empty">Nenhum agente encontrado</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {agents.map((agent) => (
+            <div className="mc-agentes-items">
+              {agents.map((agent, i) => (
                 <div
                   key={agent.id}
-                  style={{
-                    background: selectedAgent?.id === agent.id ? '#2a2a4e' : '#1a1a2e',
-                    border: '1px solid #2a2a3e',
-                    borderRadius: 6,
-                    padding: 12,
-                    cursor: 'pointer',
-                  }}
+                  className={`mc-agentes-item mc-animate-in mc-stagger-${Math.min(i + 1, 6)} ${selectedAgent?.id === agent.id ? "mc-agentes-item-active" : ""
+                    }`}
                   onClick={() => editAgent(agent)}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong>{agent.name}</strong>
-                    <span style={{
-                      fontSize: 12,
-                      color: agent.active ? '#4f4' : '#f44',
-                    }}>
-                      {agent.active ? '● Ativo' : '○ Inativo'}
+                  <div className="mc-agentes-item-top">
+                    <span
+                      className={`mc-dot ${agent.active ? "mc-dot-online" : "mc-dot-offline"}`}
+                    />
+                    <strong className="mc-agentes-item-name">{agent.name}</strong>
+                    <span
+                      className={`mc-badge ${agent.active ? "mc-badge-online" : "mc-badge-offline"}`}
+                    >
+                      {agent.active ? "Ativo" : "Inativo"}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-                    ID: {agent.id} | Modelo: {agent.model}
+                  <div className="mc-agentes-item-meta mono">
+                    {agent.id} · {agent.model}
                   </div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <div className="mc-agentes-item-actions">
                     <button
-                      onClick={(e) => { e.stopPropagation(); toggleActive(agent); }}
-                      style={{
-                        background: agent.active ? '#a33' : '#3a3',
-                        border: 'none',
-                        color: '#fff',
-                        padding: '4px 12px',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                        fontSize: 12,
+                      className={`mc-btn mc-btn-secondary mc-btn-sm`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleActive(agent);
                       }}
                     >
-                      {agent.active ? 'Desativar' : 'Ativar'}
+                      {agent.active ? "Desativar" : "Ativar"}
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); deleteAgent(agent); }}
-                      style={{
-                        background: '#833',
-                        border: 'none',
-                        color: '#fff',
-                        padding: '4px 12px',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                        fontSize: 12,
+                      className="mc-btn mc-btn-danger mc-btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteAgent(agent);
                       }}
                     >
                       Excluir
@@ -348,202 +302,140 @@ export default function AgentesPage() {
           )}
         </div>
 
-        {/* Right: Form */}
-        <div style={{ border: '1px solid #2a2a3e', borderRadius: 8, padding: 16 }}>
-          <h2 style={{ marginBottom: 16 }}>
-            {selectedAgent ? 'Editar Agente' : 'Novo Agente'}
+        {/* ── Right: Form ── */}
+        <div className="mc-card-static mc-agentes-form-wrap mc-animate-in mc-stagger-2">
+          <h2 className="mc-section-title">
+            {selectedAgent ? "Editar Agente" : "Novo Agente"}
           </h2>
 
           {message && (
-            <div style={{
-              background: message.type === 'success' ? '#1a3a1a' : '#3a1a1a',
-              border: `1px solid ${message.type === 'success' ? '#4f4' : '#f44'}`,
-              padding: 12,
-              borderRadius: 6,
-              marginBottom: 16,
-            }}>
+            <div
+              className={`mc-alert ${message.type === "success" ? "mc-alert-success" : "mc-alert-error"}`}
+            >
               {message.text}
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Nome do Agente</label>
+          <form onSubmit={handleSubmit} className="mc-agentes-form">
+            <label className="mc-field">
+              <span className="mc-field-label">Nome do Agente</span>
               <input
+                className="mc-input"
                 type="text"
-                value={form.name || ''}
+                value={form.name || ""}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
                 required
               />
-            </div>
+            </label>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Função</label>
+            <label className="mc-field">
+              <span className="mc-field-label">Função</span>
               <select
-                value={form.function || ''}
-                onChange={(e) => setForm({ ...form, function: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
+                className="mc-input"
+                value={form.function || "chat"}
+                onChange={(e) =>
+                  setForm({ ...form, function: e.target.value })
+                }
               >
                 <option value="chat">Chat</option>
                 <option value="automation">Automação</option>
                 <option value="monitoring">Monitoramento</option>
                 <option value="cron">Cron Job</option>
               </select>
-            </div>
+            </label>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Modelo Principal</label>
+            <label className="mc-field">
+              <span className="mc-field-label">Modelo</span>
               <select
-                value={form.model || 'openrouter/auto'}
+                className="mc-input"
+                value={form.model || "openrouter/auto"}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
               >
-                {models.map(model => (
-                  <option key={model} value={model}>{model}</option>
+                {models.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
                 ))}
               </select>
-            </div>
+            </label>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Workspace</label>
+            <label className="mc-field">
+              <span className="mc-field-label">Workspace</span>
               <input
+                className="mc-input"
                 type="text"
-                value={form.workspace || ''}
-                onChange={(e) => setForm({ ...form, workspace: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
+                value={form.workspace || ""}
+                onChange={(e) =>
+                  setForm({ ...form, workspace: e.target.value })
+                }
               />
-            </div>
+            </label>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Chaves API (separadas por vírgula)</label>
+            <label className="mc-field">
+              <span className="mc-field-label">Chaves API</span>
               <input
+                className="mc-input"
                 type="text"
-                value={form.apiKeys || ''}
-                onChange={(e) => setForm({ ...form, apiKeys: e.target.value })}
+                value={form.apiKeys || ""}
+                onChange={(e) =>
+                  setForm({ ...form, apiKeys: e.target.value })
+                }
                 placeholder="openrouter, brave-search, ..."
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
               />
-            </div>
+            </label>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Skills</label>
+            <label className="mc-field">
+              <span className="mc-field-label">Skills</span>
               <input
+                className="mc-input"
                 type="text"
-                value={form.skills || ''}
-                onChange={(e) => setForm({ ...form, skills: e.target.value })}
+                value={form.skills || ""}
+                onChange={(e) =>
+                  setForm({ ...form, skills: e.target.value })
+                }
                 placeholder="healthcheck, weather, ..."
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
               />
-            </div>
+            </label>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 14 }}>Heartbeat (segundos)</label>
+            <label className="mc-field">
+              <span className="mc-field-label">Heartbeat (segundos)</span>
               <input
+                className="mc-input"
                 type="number"
                 value={form.heartbeat || 60}
-                onChange={(e) => setForm({ ...form, heartbeat: parseInt(e.target.value) })}
+                onChange={(e) =>
+                  setForm({ ...form, heartbeat: parseInt(e.target.value) })
+                }
                 min={10}
                 max={300}
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: 6,
-                  color: '#fff',
-                }}
               />
-            </div>
+            </label>
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+            <div className="mc-agentes-form-actions">
               <button
                 type="submit"
+                className="mc-btn mc-btn-primary"
                 disabled={saving}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  background: '#3a3a8f',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: '#fff',
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  opacity: saving ? 0.6 : 1,
-                }}
               >
-                {saving ? 'Salvando...' : selectedAgent ? 'Salvar' : 'Criar Agente'}
+                {saving
+                  ? "Salvando..."
+                  : selectedAgent
+                    ? "Salvar"
+                    : "Criar Agente"}
               </button>
-              
               <button
                 type="button"
+                className="mc-btn mc-btn-secondary"
                 onClick={testConnection}
                 disabled={saving}
-                style={{
-                  padding: 12,
-                  background: '#2a2a3e',
-                  border: '1px solid #3a3a5e',
-                  borderRadius: 6,
-                  color: '#88f',
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                }}
               >
                 Testar Conexão
               </button>
-              
               {selectedAgent && (
                 <button
                   type="button"
+                  className="mc-btn mc-btn-danger"
                   onClick={resetForm}
-                  style={{
-                    padding: 12,
-                    background: 'transparent',
-                    border: '1px solid #f44',
-                    borderRadius: 6,
-                    color: '#f44',
-                    cursor: 'pointer',
-                  }}
                 >
                   Cancelar
                 </button>
@@ -553,29 +445,205 @@ export default function AgentesPage() {
         </div>
       </div>
 
-      {/* Sub-agents section */}
-      <div style={{ marginTop: 20, border: '1px solid #2a2a3e', borderRadius: 8, padding: 16 }}>
-        <h2 style={{ marginBottom: 16 }}>Sub-agentes (session keys)</h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {agents.filter(a => a.id.includes(':') && (a.id.includes('subagent') || a.id.includes('cron'))).map(agent => (
-            <span
-              key={agent.id}
-              style={{
-                background: '#1a1a2e',
-                padding: '6px 12px',
-                borderRadius: 20,
-                fontSize: 12,
-                color: '#88f',
-              }}
-            >
-              {agent.id}
-            </span>
-          ))}
-          {agents.filter(a => a.id.includes(':') && (a.id.includes('subagent') || a.id.includes('cron'))).length === 0 && (
-            <span style={{ color: '#666' }}>Nenhum sub-agente encontrado</span>
-          )}
+      {/* ── Sub-agents ── */}
+      <div className="mc-card-static mc-agentes-sub mc-animate-in mc-stagger-3">
+        <h2 className="mc-section-title">Sub-agentes</h2>
+        <div className="mc-agentes-sub-list">
+          {agents
+            .filter(
+              (a) =>
+                a.id.includes(":") &&
+                (a.id.includes("subagent") || a.id.includes("cron"))
+            )
+            .map((agent) => (
+              <span key={agent.id} className="mc-badge mc-badge-accent">
+                {agent.id}
+              </span>
+            ))}
+          {agents.filter(
+            (a) =>
+              a.id.includes(":") &&
+              (a.id.includes("subagent") || a.id.includes("cron"))
+          ).length === 0 && (
+              <span className="mc-empty-inline">
+                Nenhum sub-agente encontrado
+              </span>
+            )}
         </div>
       </div>
+
+      <style>{`
+        .mc-agentes {
+          padding: var(--mc-space-lg) var(--mc-space-xl);
+          max-width: 1400px;
+        }
+
+        .mc-agentes-header {
+          margin-bottom: var(--mc-space-lg);
+        }
+
+        .mc-agentes-title {
+          font-size: 28px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+        }
+
+        .mc-agentes-layout {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--mc-space-md);
+          margin-bottom: var(--mc-space-lg);
+        }
+
+        .mc-agentes-list,
+        .mc-agentes-form-wrap {
+          padding: var(--mc-space-md);
+        }
+
+        .mc-section-title {
+          font-size: 16px;
+          font-weight: 700;
+          margin-bottom: var(--mc-space-md);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .mc-agentes-count {
+          font-size: 11px;
+          color: var(--mc-text-muted);
+          background: var(--mc-bg-elevated);
+          padding: 1px 8px;
+          border-radius: 2px;
+        }
+
+        .mc-agentes-skeleton {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .mc-agentes-items {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          max-height: 600px;
+          overflow-y: auto;
+        }
+
+        .mc-agentes-item {
+          background: var(--mc-bg-base);
+          border: 1px solid var(--mc-border);
+          border-radius: 2px;
+          padding: 12px;
+          cursor: pointer;
+          transition: all var(--mc-duration-fast) var(--mc-ease-out);
+        }
+
+        .mc-agentes-item:hover {
+          border-color: var(--mc-border-strong);
+          background: var(--mc-bg-elevated);
+        }
+
+        .mc-agentes-item-active {
+          border-color: var(--mc-accent) !important;
+          background: var(--mc-accent-glow) !important;
+        }
+
+        .mc-agentes-item-top {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+        }
+
+        .mc-agentes-item-name {
+          flex: 1;
+          font-size: 14px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .mc-agentes-item-meta {
+          font-size: 11px;
+          color: var(--mc-text-muted);
+          margin-bottom: 8px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .mc-agentes-item-actions {
+          display: flex;
+          gap: 6px;
+        }
+
+        .mc-btn-sm {
+          padding: 4px 12px;
+          font-size: 12px;
+        }
+
+        .mc-agentes-form {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .mc-field {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .mc-field-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--mc-text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .mc-agentes-form-actions {
+          display: flex;
+          gap: 8px;
+          margin-top: 8px;
+        }
+
+        .mc-agentes-sub {
+          padding: var(--mc-space-md);
+        }
+
+        .mc-agentes-sub-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .mc-empty {
+          color: var(--mc-text-muted);
+          text-align: center;
+          padding: var(--mc-space-xl);
+          font-size: 13px;
+        }
+
+        .mc-empty-inline {
+          color: var(--mc-text-muted);
+          font-size: 12px;
+        }
+
+        @media (max-width: 1024px) {
+          .mc-agentes-layout {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .mc-agentes {
+            padding: var(--mc-space-md);
+          }
+        }
+      `}</style>
     </div>
   );
 }

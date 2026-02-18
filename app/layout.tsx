@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import Sidebar from "./components/Sidebar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrains = JetBrains_Mono({
+  variable: "--font-jetbrains",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Mission Control - OpenClaw",
-  description: "Painel de controle para agentes OpenClaw",
+  title: "Mission Control — OpenClaw",
+  description:
+    "Painel tático de orquestração para agentes de IA OpenClaw",
 };
 
 export default function RootLayout({
@@ -24,26 +28,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{ background: '#0A0A0F', color: '#EDEDED', margin: 0 }}
-      >
-        <nav style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 24,
-          padding: '12px 24px',
-          borderBottom: '1px solid #2A2A3E',
-          background: '#1A1A2E',
-        }}>
-          <strong style={{ fontSize: 18 }}>🛡️ Mission Control</strong>
-          <a href="/" style={{ color: '#88f', textDecoration: 'none' }}>Início</a>
-          <a href="/dashboard" style={{ color: '#88f', textDecoration: 'none' }}>Painel</a>
-          <a href="/agentes" style={{ color: '#88f', textDecoration: 'none' }}>Agentes</a>
-          <a href="/config" style={{ color: '#88f', textDecoration: 'none' }}>Configurações</a>
-          <a href="/logs" style={{ color: '#88f', textDecoration: 'none' }}>Logs</a>
-        </nav>
-        {children}
+      <body className={`${inter.variable} ${jetbrains.variable}`}>
+        <div className="mc-shell">
+          <Sidebar />
+          <main className="mc-main">{children}</main>
+        </div>
       </body>
     </html>
   );
