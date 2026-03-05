@@ -53,9 +53,13 @@ export const api = {
   getSessionStatus: () => invokeTool('session_status', {}),
 
   // Real logs from OpenClaw
-  getLogs: (lines = 50, filter = '') => invokeTool('exec', { 
-    command: `tail -n ${lines} \$(ls -t /tmp/openclaw/openclaw-*.log 2>/dev/null | head -1) 2>/dev/null || echo 'No recent logs found'${filter ? ` | grep -i '${filter.replace(/'/g, "\\'")}'` : ''} || tail -n ${lines} /tmp/openclaw/openclaw-*.log 2>/dev/null` 
-  }),
+  getLogs: async (lines = 50, filter = '') => {
+    const params = new URLSearchParams({ lines: lines.toString() });
+    if (filter) params.append('filter', filter);
+    const res = await fetch(`/api/logs?${params}`);
+    const data = await res.json();
+    return data.logs || [];
+  },
 
   // OpenClaw config - reads agents and models from openclaw.json
   getOpenClawConfig: async () => {

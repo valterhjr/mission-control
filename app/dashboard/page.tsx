@@ -220,19 +220,24 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ── Grid: Kanban + Logs ── */}
+      {/* ── Grid: Kanban + Logs + Charts ── */}
       <section className="mc-dashboard-grid mc-animate-in mc-stagger-3">
         <div className="mc-card-static mc-dashboard-section mc-dashboard-section-wide">
           <h2 className="mc-section-title">Kanban</h2>
           <KanbanBoard />
         </div>
 
-        <div className="mc-card-static mc-dashboard-section">
-          <h2 className="mc-section-title">
-            Logs
-            <span className="mc-dot mc-dot-online" style={{ marginLeft: 8 }} />
-          </h2>
-          <LogTimeline />
+        <div className="mc-grid-cols-2">
+          <div className="mc-card-static mc-dashboard-section">
+            <h2 className="mc-section-title">
+              Logs
+              <span className="mc-dot mc-dot-online" style={{ marginLeft: 8 }} />
+            </h2>
+            <LogTimeline />
+          </div>
+          <div className="mc-card-static mc-dashboard-section">
+            <UsageChart />
+          </div>
         </div>
       </section>
 
