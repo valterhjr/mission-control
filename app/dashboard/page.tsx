@@ -7,6 +7,7 @@ import KanbanBoard from "../components/KanbanBoard";
 import LogTimeline from "../components/LogTimeline";
 import ConfigEditor from "../components/ConfigEditor";
 import UsageChart from "../components/UsageChart";
+import ToolsPanel from "../components/ToolsPanel";
 
 type Agent = {
   name: string;
@@ -215,9 +216,14 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="mc-card-static mc-dashboard-section">
-          <h2 className="mc-section-title">Configurações</h2>
-          <ConfigEditor />
+        <div className="mc-grid-cols-2">
+          <div className="mc-card-static mc-dashboard-section">
+            <h2 className="mc-section-title">Configurações</h2>
+            <ConfigEditor />
+          </div>
+          <div className="mc-card-static mc-dashboard-section">
+            <ToolsPanel />
+          </div>
         </div>
       </section>
 
