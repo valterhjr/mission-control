@@ -6,6 +6,7 @@ import AgentCard from "../components/AgentCard";
 import KanbanBoard from "../components/KanbanBoard";
 import LogTimeline from "../components/LogTimeline";
 import ConfigEditor from "../components/ConfigEditor";
+import UsageChart from "../components/UsageChart";
 
 type Agent = {
   name: string;
@@ -227,7 +228,7 @@ export default function Dashboard() {
           <KanbanBoard />
         </div>
 
-        <div className="mc-grid-cols-2">
+        <div className="mc-dashboard-grid mc-subgrid">
           <div className="mc-card-static mc-dashboard-section">
             <h2 className="mc-section-title">
               Logs
@@ -288,6 +289,12 @@ export default function Dashboard() {
           margin-bottom: var(--mc-space-lg);
         }
 
+        .mc-subgrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--mc-space-md);
+        }
+
         .mc-dashboard-section {
           padding: var(--mc-space-md);
         }
@@ -324,7 +331,7 @@ export default function Dashboard() {
         }
 
         @media (max-width: 1024px) {
-          .mc-dashboard-grid {
+          .mc-dashboard-grid, .mc-subgrid {
             grid-template-columns: 1fr;
           }
           .mc-dashboard-stats {
