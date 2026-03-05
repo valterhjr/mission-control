@@ -52,6 +52,11 @@ export const api = {
     invokeTool('gateway', { action: 'restart', reason }),
   getSessionStatus: () => invokeTool('session_status', {}),
 
+  // Real logs from OpenClaw
+  getLogs: (lines = 50, filter = '') => invokeTool('exec', { 
+    command: `tail -n ${lines} \$(ls -t /tmp/openclaw/openclaw-*.log 2>/dev/null | head -1) 2>/dev/null || echo 'No recent logs found'${filter ? ` | grep -i '${filter.replace(/'/g, "\\'")}'` : ''} || tail -n ${lines} /tmp/openclaw/openclaw-*.log 2>/dev/null` 
+  }),
+
   // OpenClaw config - reads agents and models from openclaw.json
   getOpenClawConfig: async () => {
     const res = await fetch('/api/config');

@@ -232,7 +232,7 @@ export default function Dashboard() {
             Logs
             <span className="mc-dot mc-dot-online" style={{ marginLeft: 8 }} />
           </h2>
-          <LogTimeline logs={logs} />
+          <LogTimeline />
         </div>
       </section>
 
