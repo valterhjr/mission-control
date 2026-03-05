@@ -36,9 +36,10 @@ export default function KanbanBoard() {
 
   const loadSessions = async () => {
     try {
-      const [sessionsResult, cronResult] = await Promise.all([
+      const [sessionsResult, cronResult, configResult] = await Promise.all([
         (api as Record<string, Function>).getSessions?.(20).catch(() => null),
         (api as Record<string, Function>).getCronJobs?.().catch(() => null),
+        (api as Record<string, Function>).getOpenClawConfig?.().catch(() => null),
       ]);
 
       let activeCronIds: string[] = [];
@@ -69,12 +70,23 @@ export default function KanbanBoard() {
         return true;
       });
 
+      // Build session lookup by agent ID
+      const sessionByAgentId = new Map<string, Record<string, unknown>>();
+      sessions.forEach((s) => {
+        const key = (s.key as string) || "";
+        const parts = key.split(":");
+        if (parts.length >= 2) {
+          sessionByAgentId.set(parts[1], s);
+        }
+      });
+
       const now = Date.now();
       const backlog: Task[] = [];
       const inProgress: Task[] = [];
       const review: Task[] = [];
       const done: Task[] = [];
 
+      // Place sessions in columns by activity
       sessions.forEach((s) => {
         const key = (s.key as string) || "";
         const updatedAt = (s.updatedAt as number) || 0;
@@ -96,11 +108,18 @@ export default function KanbanBoard() {
         }
       });
 
-      if (inProgress.length === 0 && review.length === 0 && done.length === 0) {
-        backlog.push({
-          id: "placeholder",
-          title: "Nenhuma tarefa",
-          description: "Tarefas aparecerão aqui automaticamente",
+      // Add config agents without sessions to Backlog
+      if (configResult?.agents && Array.isArray(configResult.agents)) {
+        const agentsWithSessions = new Set(sessionByAgentId.keys());
+        configResult.agents.forEach((ca: Record<string, string>) => {
+          if (!agentsWithSessions.has(ca.id)) {
+            backlog.push({
+              id: ca.id,
+              title: ca.name || ca.id,
+              description: ca.model || "sem sessão",
+              status: "idle",
+            });
+          }
         });
       }
 

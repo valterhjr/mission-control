@@ -59,9 +59,10 @@ export default function AgentesPage() {
   const loadAgents = async () => {
     setLoading(true);
     try {
-      const [sessionsResult, cronResult] = await Promise.all([
+      const [sessionsResult, cronResult, configResult] = await Promise.all([
         (api as Record<string, Function>).getSessions?.(50).catch(() => null),
         (api as Record<string, Function>).getCronJobs?.().catch(() => null),
+        (api as Record<string, Function>).getOpenClawConfig?.().catch(() => null),
       ]);
 
       let activeCronIds: string[] = [];
@@ -87,46 +88,84 @@ export default function AgentesPage() {
         ) as Record<string, unknown>[];
       }
 
-      sessions = sessions.filter((s) => {
-        const keyStr = (s.key as string) || "";
-        if (keyStr.includes("cron:")) {
-          const cronId = keyStr.split("cron:").pop() || "";
-          return activeCronIds.includes(cronId);
+      // Build session lookup by agent ID
+      const sessionByAgentId = new Map<string, Record<string, unknown>>();
+      sessions.forEach((s) => {
+        const key = (s.key as string) || "";
+        const parts = key.split(":");
+        if (parts.length >= 2) {
+          sessionByAgentId.set(parts[1], s);
         }
-        const updatedAt = (s.updatedAt as number) || 0;
-        return Date.now() - updatedAt < 24 * 60 * 60 * 1000;
       });
 
-      const mapped: Agent[] = sessions.map((s) => {
-        const keyStr = (s.key as string) || "";
-        const isCron = keyStr.includes("cron:");
-        let cronId = "";
-        if (isCron) {
-          cronId = keyStr.split("cron:").pop() || "";
-        }
-        const isActive = isCron
-          ? activeCronIds.includes(cronId)
-          : !!(
-            (s.updatedAt as number) &&
-            Date.now() - (s.updatedAt as number) < 120000
-          );
+      let mapped: Agent[];
 
-        return {
-          id: (s.sessionId as string) || keyStr,
-          name:
-            (s.displayName as string) ||
-            (s.label as string) ||
-            keyStr ||
-            "Agente",
-          function: (s.channel as string) || (isCron ? "cron" : "chat"),
-          model: (s.model as string) || "openrouter/auto",
-          workspace: "/root/.openclaw/workspace",
-          apiKeys: "",
-          skills: "",
-          heartbeat: 60,
-          active: isActive,
-        };
-      });
+      if (configResult?.agents && Array.isArray(configResult.agents)) {
+        // Merge config agents with session data
+        mapped = configResult.agents.map((ca: Record<string, string>) => {
+          const session = sessionByAgentId.get(ca.id);
+          const updatedAt = session ? (session.updatedAt as number) || 0 : 0;
+          const key = session ? (session.key as string) || "" : "";
+          const isCron = key.includes("cron:") || !!ca.hasHeartbeat;
+          const isActive = isCron
+            ? activeCronIds.includes(ca.id)
+            : !!(updatedAt && Date.now() - updatedAt < 120000);
+
+          return {
+            id: ca.id,
+            name: ca.name || ca.id,
+            function: isCron ? "cron" : (session?.channel as string) || "chat",
+            model: ca.model || "openrouter/auto",
+            workspace: ca.workspace || "/root/.openclaw/workspace",
+            apiKeys: "",
+            skills: "",
+            heartbeat: 60,
+            active: isActive,
+          };
+        });
+      } else {
+        // Fallback: sessions only (original logic)
+        sessions = sessions.filter((s) => {
+          const keyStr = (s.key as string) || "";
+          if (keyStr.includes("cron:")) {
+            const cronId = keyStr.split("cron:").pop() || "";
+            return activeCronIds.includes(cronId);
+          }
+          const updatedAt = (s.updatedAt as number) || 0;
+          return Date.now() - updatedAt < 24 * 60 * 60 * 1000;
+        });
+
+        mapped = sessions.map((s) => {
+          const keyStr = (s.key as string) || "";
+          const isCron = keyStr.includes("cron:");
+          let cronId = "";
+          if (isCron) {
+            cronId = keyStr.split("cron:").pop() || "";
+          }
+          const isActive = isCron
+            ? activeCronIds.includes(cronId)
+            : !!(
+              (s.updatedAt as number) &&
+              Date.now() - (s.updatedAt as number) < 120000
+            );
+
+          return {
+            id: (s.sessionId as string) || keyStr,
+            name:
+              (s.displayName as string) ||
+              (s.label as string) ||
+              keyStr ||
+              "Agente",
+            function: (s.channel as string) || (isCron ? "cron" : "chat"),
+            model: (s.model as string) || "openrouter/auto",
+            workspace: "/root/.openclaw/workspace",
+            apiKeys: "",
+            skills: "",
+            heartbeat: 60,
+            active: isActive,
+          };
+        });
+      }
 
       setAgents(mapped);
     } catch {

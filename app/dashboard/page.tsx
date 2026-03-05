@@ -13,6 +13,7 @@ type Agent = {
   status: string;
   lastActivity?: string;
   type?: string;
+  model?: string;
 };
 
 type Stats = {
@@ -36,9 +37,10 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [result, cronResult] = await Promise.all([
+        const [result, cronResult, configResult] = await Promise.all([
           (api as Record<string, Function>).getSessions?.(20),
           (api as Record<string, Function>).getCronJobs?.().catch(() => null),
+          (api as Record<string, Function>).getOpenClawConfig?.().catch(() => null),
         ]);
 
         let sessions: Record<string, unknown>[] = [];
@@ -58,22 +60,58 @@ export default function Dashboard() {
           cronCount = jobs.length;
         }
 
-        const mapped: Agent[] = sessions.map((s) => {
+        // Build session lookup by agent ID (key format: "agent:<agentId>:...")
+        const sessionByAgentId = new Map<string, Record<string, unknown>>();
+        sessions.forEach((s) => {
           const key = (s.key as string) || "";
-          const updatedAt = (s.updatedAt as number) || 0;
-          const isOnline = updatedAt > 0 && Date.now() - updatedAt < 120000;
-          const isCron = key.includes("cron:");
-
-          return {
-            name: (s.displayName as string) || (s.label as string) || key || "Agente",
-            id: (s.sessionId as string) || key || "",
-            status: isOnline ? "Online" : "Offline",
-            lastActivity: updatedAt
-              ? new Date(updatedAt).toLocaleString("pt-BR")
-              : "",
-            type: isCron ? "cron" : (s.channel as string) || "chat",
-          };
+          // Extract agent ID from session key (e.g., "agent:main:main" → "main")
+          const parts = key.split(":");
+          if (parts.length >= 2) {
+            sessionByAgentId.set(parts[1], s);
+          }
         });
+
+        let mapped: Agent[];
+
+        if (configResult?.agents && Array.isArray(configResult.agents)) {
+          // Merge config agents with session data
+          mapped = configResult.agents.map((ca: Record<string, string>) => {
+            const session = sessionByAgentId.get(ca.id);
+            const updatedAt = session ? (session.updatedAt as number) || 0 : 0;
+            const isOnline = updatedAt > 0 && Date.now() - updatedAt < 120000;
+            const key = session ? (session.key as string) || "" : "";
+            const isCron = key.includes("cron:") || !!ca.hasHeartbeat;
+
+            return {
+              name: ca.name || ca.id,
+              id: session ? (session.sessionId as string) || ca.id : ca.id,
+              status: isOnline ? "Online" : "Offline",
+              lastActivity: updatedAt
+                ? new Date(updatedAt).toLocaleString("pt-BR")
+                : "",
+              type: isCron ? "cron" : (session?.channel as string) || "agent",
+              model: ca.model || "",
+            };
+          });
+        } else {
+          // Fallback: use sessions only
+          mapped = sessions.map((s) => {
+            const key = (s.key as string) || "";
+            const updatedAt = (s.updatedAt as number) || 0;
+            const isOnline = updatedAt > 0 && Date.now() - updatedAt < 120000;
+            const isCron = key.includes("cron:");
+
+            return {
+              name: (s.displayName as string) || (s.label as string) || key || "Agente",
+              id: (s.sessionId as string) || key || "",
+              status: isOnline ? "Online" : "Offline",
+              lastActivity: updatedAt
+                ? new Date(updatedAt).toLocaleString("pt-BR")
+                : "",
+              type: isCron ? "cron" : (s.channel as string) || "chat",
+            };
+          });
+        }
 
         const onlineCount = mapped.filter((a) => a.status === "Online").length;
 
@@ -84,7 +122,7 @@ export default function Dashboard() {
           crons: cronCount,
         });
         setLogs((prev) => [
-          `${new Date().toLocaleString("pt-BR")} — ${sessions.length} sessões carregadas`,
+          `${new Date().toLocaleString("pt-BR")} — ${mapped.length} agentes, ${sessions.length} sessões carregadas`,
           ...prev,
         ]);
       } catch (err: unknown) {
@@ -169,6 +207,7 @@ export default function Dashboard() {
                   status={a.status}
                   lastActivity={a.lastActivity}
                   type={a.type}
+                  model={a.model}
                 />
               ))}
             </div>

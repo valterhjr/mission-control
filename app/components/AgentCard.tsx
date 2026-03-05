@@ -6,6 +6,7 @@ type Props = {
   status: string;
   lastActivity?: string;
   type?: string;
+  model?: string;
 };
 
 export default function AgentCard({
@@ -14,6 +15,7 @@ export default function AgentCard({
   status,
   lastActivity,
   type = "chat",
+  model,
 }: Props) {
   const isOnline = status === "Online";
 
@@ -36,6 +38,7 @@ export default function AgentCard({
 
       <div className="mc-agent-card-meta">
         <span className="mc-badge mc-badge-accent">{typeLabel[type] ?? "AGENT"}</span>
+        {model && <span className="mc-agent-card-model mono">{model}</span>}
       </div>
 
       <div className="mc-agent-card-footer">
@@ -78,6 +81,15 @@ export default function AgentCard({
 
         .mc-agent-card-meta {
           margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .mc-agent-card-model {
+          font-size: 10px;
+          color: var(--mc-text-muted);
         }
 
         .mc-agent-card-footer {

@@ -5,9 +5,9 @@ export async function invokeTool(tool: string, args: Record<string, any> = {}): 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tool, args }),
   });
-  
+
   const data = await res.json();
-  
+
   if (!data.ok) {
     throw new Error(data.details || 'Erro na API');
   }
@@ -15,7 +15,7 @@ export async function invokeTool(tool: string, args: Record<string, any> = {}): 
   // Unwrap: content pode ser string JSON ou array de parts
   const result = data.result;
   if (!result) return result;
-  
+
   const content = result.content;
   if (!content) return result;
 
@@ -51,20 +51,23 @@ export const api = {
   restartGateway: (reason?: string) =>
     invokeTool('gateway', { action: 'restart', reason }),
   getSessionStatus: () => invokeTool('session_status', {}),
-  
-  // Models - returns list of available models from config
+
+  // OpenClaw config - reads agents and models from openclaw.json
+  getOpenClawConfig: async () => {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Failed to load config');
+    return data;
+  },
+
+  // Models - fetched from OpenClaw config
   getModels: async (): Promise<string[]> => {
-    // These are loaded from the OpenClaw config
-    return [
-      'openrouter/auto',
-      'openrouter/minimax/minimax-m2.5',
-      'openrouter/moonshotai/kimi-k2.5',
-      'modal/zai-org/GLM-5-FP8',
-      'openrouter/openai/gpt-5-nano',
-      'openrouter/openai/gpt-4o-mini',
-      'openrouter/stepfun/step-3.5-flash:free',
-      'openrouter/arcee-ai/trinity-large-preview:free',
-      'openrouter/google/gemini-2.5-flash-lite',
-    ];
+    try {
+      const config = await api.getOpenClawConfig();
+      if (Array.isArray(config.models) && config.models.length > 0) {
+        return config.models;
+      }
+    } catch { /* fall through */ }
+    return ['openrouter/auto'];
   },
 };

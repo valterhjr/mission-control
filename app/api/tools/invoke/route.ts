@@ -24,7 +24,17 @@ export async function POST(req: Request) {
 
     const envelope = await res.json();
     if (!envelope.ok) {
-      return NextResponse.json({ ok: false, details: envelope?.details ?? 'Gateway error' }, { status: 502 });
+      const isNotFound = envelope?.error?.type === 'not_found' || envelope?.details?.includes('not available');
+
+      if (isNotFound && body.tool === 'cron') {
+        return NextResponse.json({ ok: true, result: { jobs: [] } });
+      }
+
+      const errorDetails = envelope?.error?.message || envelope?.details || 'Gateway error';
+      if (!isNotFound) {
+        console.error('Gateway returned error:', envelope);
+      }
+      return NextResponse.json({ ok: false, details: errorDetails }, { status: isNotFound ? 404 : 502 });
     }
 
     return NextResponse.json({ ok: true, result: envelope.result ?? {} });
