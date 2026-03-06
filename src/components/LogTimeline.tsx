@@ -35,7 +35,7 @@ export default function LogTimeline() {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 3000); // Poll 3s
+    const interval = setInterval(fetchLogs, 10000); // Poll 10s
     return () => clearInterval(interval);
   }, [fetchLogs]);
 
