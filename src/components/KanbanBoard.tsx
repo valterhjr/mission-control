@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { api } from "../../src/lib/api";
+import { t } from "../../src/lib/i18n";
+import { useCallback } from "react";
 
 type Task = {
   id: string;
@@ -17,16 +19,18 @@ type Column = {
   tasks: Task[];
 };
 
-const COLUMN_CONFIGS: { id: string; title: string; color: string }[] = [
-  { id: "backlog", title: "Backlog", color: "var(--mc-text-muted)" },
-  { id: "in_progress", title: "Em Progresso", color: "var(--mc-accent)" },
-  { id: "review", title: "Revisão", color: "var(--mc-warning)" },
-  { id: "done", title: "Concluído", color: "var(--mc-online)" },
+const COLUMN_CONFIGS = () => [
+  { id: "backlog", title: t("Backlog"), color: "var(--mc-text-muted)" },
+  { id: "in_progress", title: t("Em Progresso"), color: "var(--mc-accent)" },
+  { id: "review", title: t("Revisão"), color: "var(--mc-warning)" },
+  { id: "done", title: t("Concluído"), color: "var(--mc-online)" },
 ];
+
+type ApiType = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
 export default function KanbanBoard() {
   const [columns, setColumns] = useState<Column[]>(
-    COLUMN_CONFIGS.map((c) => ({ ...c, tasks: [] }))
+    COLUMN_CONFIGS().map((c) => ({ ...c, tasks: [] }))
   );
   const [draggedTask, setDraggedTask] = useState<{
     taskId: string;
@@ -34,12 +38,12 @@ export default function KanbanBoard() {
   } | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     try {
       const [sessionsResult, cronResult, configResult] = await Promise.all([
-        (api as Record<string, Function>).getSessions?.(20).catch(() => null),
-        (api as Record<string, Function>).getCronJobs?.().catch(() => null),
-        (api as Record<string, Function>).getOpenClawConfig?.().catch(() => null),
+        (api as ApiType).getSessions?.(20).catch(() => null),
+        (api as ApiType).getCronJobs?.().catch(() => null),
+        (api as ApiType).getOpenClawConfig?.().catch(() => null),
       ]);
 
       let activeCronIds: string[] = [];
@@ -109,14 +113,15 @@ export default function KanbanBoard() {
       });
 
       // Add config agents without sessions to Backlog
-      if (configResult?.agents && Array.isArray(configResult.agents)) {
+      const cr = configResult as { agents?: Record<string, string>[] };
+      if (cr?.agents && Array.isArray(cr.agents)) {
         const agentsWithSessions = new Set(sessionByAgentId.keys());
-        configResult.agents.forEach((ca: Record<string, string>) => {
+        cr.agents.forEach((ca: Record<string, string>) => {
           if (!agentsWithSessions.has(ca.id)) {
             backlog.push({
               id: ca.id,
               title: ca.name || ca.id,
-              description: ca.model || "sem sessão",
+              description: ca.model || t("sem sessão"),
               status: "idle",
             });
           }
@@ -124,21 +129,29 @@ export default function KanbanBoard() {
       }
 
       setColumns([
-        { ...COLUMN_CONFIGS[0], tasks: backlog },
-        { ...COLUMN_CONFIGS[1], tasks: inProgress },
-        { ...COLUMN_CONFIGS[2], tasks: review },
-        { ...COLUMN_CONFIGS[3], tasks: done },
+        { ...COLUMN_CONFIGS()[0], tasks: backlog },
+        { ...COLUMN_CONFIGS()[1], tasks: inProgress },
+        { ...COLUMN_CONFIGS()[2], tasks: review },
+        { ...COLUMN_CONFIGS()[3], tasks: done },
       ]);
     } catch (err) {
       console.error("Kanban load error:", err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadSessions();
+    let mounted = true;
+    const fetch = async () => {
+      if (!mounted) return;
+      await loadSessions();
+    };
+    fetch();
     const interval = setInterval(loadSessions, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [loadSessions]);
 
   const handleDragStart = (
     e: React.DragEvent,
@@ -210,20 +223,24 @@ export default function KanbanBoard() {
                 draggable={task.id !== "placeholder"}
                 onDragStart={(e) => handleDragStart(e, task.id, col.id)}
                 className={`mc-kanban-task mc-animate-in mc-stagger-${Math.min(i + 1, 6)}`}
+                role="listitem"
+                tabIndex={0}
+                onKeyDown={() => { }}
+                aria-label={task.title}
               >
                 <div className="mc-kanban-task-title">{task.title}</div>
                 <div className="mc-kanban-task-desc mono">{task.description}</div>
                 {task.status === "trabalhando" && (
                   <span className="mc-badge mc-badge-online" style={{ marginTop: 6 }}>
                     <span className="mc-dot mc-dot-online" style={{ width: 6, height: 6 }} />
-                    Ativo
+                    {t("Ativo")}
                   </span>
                 )}
               </div>
             ))}
 
             {col.tasks.length === 0 && (
-              <div className="mc-kanban-empty">Vazio</div>
+              <div className="mc-kanban-empty">{t("Vazio")}</div>
             )}
           </div>
         </div>

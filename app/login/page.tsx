@@ -1,96 +1,125 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { t } from "../../src/lib/i18n";
 
 export default function LoginPage() {
-    const [code, setCode] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(false);
-    const router = useRouter();
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const router = useRouter();
 
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError(false);
+  useEffect(() => {
+    document.title = "Acesso — Mission Control";
+  }, []);
 
-        try {
-            const res = await fetch("/api/auth", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code }),
-            });
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(false);
 
-            if (res.ok) {
-                router.refresh();
-                router.push("/");
-            } else {
-                setError(true);
-                setCode("");
-            }
-        } catch {
-            setError(true);
-        } finally {
-            setLoading(false);
-        }
-    };
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
 
-    return (
-        <div className="mc-login-shell">
-            <div className="mc-login-card mc-animate-in">
-                <header className="mc-login-header">
-                    <svg width="48" height="48" viewBox="0 0 28 28" fill="none">
-                        <rect width="28" height="28" rx="2" fill="var(--mc-accent)" />
-                        <path d="M8 14l4-6 4 6-4 6-4-6z" fill="#fff" opacity="0.9" />
-                        <path
-                            d="M14 8l4 6-4 6"
-                            stroke="#fff"
-                            strokeWidth="1.5"
-                            fill="none"
-                            opacity="0.5"
-                        />
-                    </svg>
-                    <h1 className="mc-login-title">
-                        Mission<span style={{ color: "var(--mc-accent)" }}>Control</span>
-                    </h1>
-                    <p className="mc-login-subtitle">SECURE ACCESS GATEWAY</p>
-                </header>
+      if (res.ok) {
+        router.refresh();
+        router.push("/");
+      } else {
+        setError(true);
+        setCode("");
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-                <form onSubmit={handleLogin} className="mc-login-form">
-                    <div className={`mc-login-input-wrap ${error ? "mc-error" : ""}`}>
-                        <input
-                            type="password"
-                            className="mc-login-input mono"
-                            placeholder="ACCESS CODE //"
-                            value={code}
-                            onChange={(e) => {
-                                setCode(e.target.value);
-                                setError(false);
-                            }}
-                            disabled={loading}
-                            autoFocus
-                        />
-                        {loading && <div className="mc-login-spinner" />}
-                    </div>
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": t("Acesso ao Mission Control"),
+    "description": t("Página de autenticação segura para o gateway Mission Control."),
+    "author": { "@type": "Organization", "name": "OpenClaw" }
+  };
 
-                    <button
-                        type="submit"
-                        className="mc-btn mc-btn-primary mc-login-btn"
-                        disabled={loading || !code}
-                    >
-                        {loading ? "AUTHENTICATING..." : "GRANT ACCESS"}
-                    </button>
-                </form>
+  return (
+    <div className="mc-login-shell">
+      <title>{t("Acesso — Mission Control")}</title>
+      <meta name="description" content={t("Acesso restrito ao Gateway do Mission Control")} />
+      <meta name="author" content="OpenClaw" />
+      <meta property="og:title" content={t("Acesso — Mission Control")} />
+      <meta property="og:description" content={t("Acesso restrito ao Gateway do Mission Control")} />
 
-                <div className="mc-login-footer">
-                    <span className="mono" style={{ fontSize: 10, color: "var(--mc-text-muted)" }}>
-                        ID: {Math.random().toString(36).substring(7).toUpperCase()}
-                    </span>
-                    <span className="mc-dot mc-dot-online" />
-                </div>
-            </div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
 
-            <style>{`
+      <div className="mc-login-card mc-animate-in">
+        <header className="mc-login-header">
+          <h2 className="sr-only">{t("Sistema de Autenticação")}</h2>
+          <svg width="48" height="48" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="2" fill="var(--mc-accent)" />
+            <path d="M8 14l4-6 4 6-4 6-4-6z" fill="#fff" opacity="0.9" />
+            <path
+              d="M14 8l4 6-4 6"
+              stroke="#fff"
+              strokeWidth="1.5"
+              fill="none"
+              opacity="0.5"
+            />
+          </svg>
+          <h1 className="mc-login-title">
+            Mission<span style={{ color: "var(--mc-accent)" }}>Control</span>
+          </h1>
+          <p className="mc-login-subtitle">SECURE ACCESS GATEWAY</p>
+        </header>
+
+        <form onSubmit={handleLogin} className="mc-login-form">
+          <div className={`mc-login-input-wrap ${error ? "mc-error" : ""}`}>
+            <label className="mc-label" style={{ textAlign: 'left' }} htmlFor="access-code-input">{t("Código de Acesso:")}</label>
+            <input
+              id="access-code-input"
+              type="password"
+              className="mc-login-input mono"
+              placeholder="ACCESS CODE //"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setError(false);
+              }}
+              disabled={loading}
+              autoFocus
+              aria-label="Código de Acesso"
+            />
+            {loading && <div className="mc-login-spinner" />}
+          </div>
+
+          <button
+            type="submit"
+            className="mc-btn mc-btn-primary mc-login-btn"
+            disabled={loading || !code}
+          >
+            {loading ? "AUTHENTICATING..." : "GRANT ACCESS"}
+          </button>
+        </form>
+
+        <div className="mc-login-footer">
+          <h2 className="sr-only">{t("Sessão e Terminal")}</h2>
+          <span className="mono" style={{ fontSize: 10, color: "var(--mc-text-muted)" }}>
+            ID: {Math.random().toString(36).substring(7).toUpperCase()}
+          </span>
+          <span className="mc-dot mc-dot-online" />
+        </div>
+      </div>
+
+      <style>{`
         .mc-login-shell {
           min-height: 100vh;
           display: flex;
@@ -192,6 +221,6 @@ export default function LoginPage() {
           40%, 60% { transform: translate3d(4px, 0, 0); }
         }
       `}</style>
-        </div>
-    );
+    </div>
+  );
 }

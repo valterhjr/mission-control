@@ -1,4 +1,5 @@
 import React from "react";
+import { t } from "../../src/lib/i18n";
 
 type Props = {
   name: string;
@@ -27,7 +28,7 @@ export default function AgentCard({
   };
 
   return (
-    <div className="mc-agent-card">
+    <div className="mc-agent-card" aria-label={t("Cartão do Agente")}>
       <div className="mc-agent-card-header">
         <span className={`mc-dot ${isOnline ? "mc-dot-online" : "mc-dot-offline"}`} />
         <strong className="mc-agent-card-name">{name}</strong>

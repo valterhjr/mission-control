@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../../src/lib/api";
-
-type Props = {}; // Standalone now
+import { t } from "../../src/lib/i18n";
 
 export default function LogTimeline() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -14,16 +13,21 @@ export default function LogTimeline() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await api.getLogs(100, search || undefined);
-      const logText = typeof result === "string" ? result : 
-        Array.isArray(result?.content) ? result.content[0]?.text || "" : 
-        result?.content || "No logs";
-      
-      const lines = logText.split("\n").filter(Boolean).slice(-50); // Last 50
+      const result = await api.getLogs(50, search || undefined);
+
+      let lines: string[] = [];
+      if (Array.isArray(result)) {
+        lines = result.slice(-50);
+      } else if (typeof result === 'string') {
+        lines = result.split("\n").filter(Boolean).slice(-50);
+      }
+
+      if (lines.length === 0) lines = ["Sem logs recentes no Gateway."];
+
       setLogs(lines);
     } catch (err) {
       console.error("Logs fetch error:", err);
-      setLogs(["Erro ao carregar logs: " + (err as Error)?.message]);
+      setLogs([t("Erro ao carregar logs: ") + (err as Error)?.message]);
     } finally {
       setLoading(false);
     }
@@ -46,25 +50,34 @@ export default function LogTimeline() {
   return (
     <div className="mc-log-timeline">
       <div className="mc-log-search">
+        <label className="sr-only" htmlFor="log-filter-input">{t("Filtrar Registros")}</label>
         <input
+          id="log-filter-input"
           type="text"
           className="mc-input mono"
-          placeholder="Filtrar logs (error, warn...)"
+          placeholder={t("Filtrar logs (error, warn...)")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') fetchLogs(); }}
+          aria-label={t("Filtrar logs")}
         />
-        <button className="mc-btn mc-btn-secondary" onClick={fetchLogs} disabled={loading}>
-          {loading ? "🔄" : "Atualizar"}
+        <button
+          className="mc-btn mc-btn-secondary"
+          onClick={fetchLogs}
+          onKeyDown={(e) => { if (e.key === 'Enter') fetchLogs(); }}
+          disabled={loading}
+        >
+          {loading ? "🔄" : t("Atualizar")}
         </button>
       </div>
 
       {logs.length === 0 ? (
-        <div className="mc-log-empty">Aguardando logs...</div>
+        <div className="mc-log-empty">{t("Aguardando logs...")}</div>
       ) : (
         logs.map((log, i) => (
-          <div 
-            key={i} 
-            className={`mc-log-entry mc-animate-in ${isError(log) ? "mc-log-error" : ""}`} 
+          <div
+            key={i}
+            className={`mc-log-entry mc-animate-in ${isError(log) ? "mc-log-error" : ""}`}
             style={{ animationDelay: `${i * 20}ms` }}
           >
             <span className={`mc-log-bullet ${isError(log) ? "mc-log-bullet-error" : ""}`} />

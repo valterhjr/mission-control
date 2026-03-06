@@ -6,14 +6,14 @@ export type ContentPart = {
   type: string;
   text?: string;
   name?: string;
-  arguments?: any;
+  arguments?: unknown;
 };
 
 export type GatewayEnvelope = {
   ok: boolean;
   result?: {
     content?: ContentPart[] | string;
-    details?: any;
+    details?: unknown;
   };
   error?: string;
 };
@@ -22,7 +22,7 @@ export type GatewayEnvelope = {
  * Extrai dados úteis do envelope do gateway.
  * content pode ser string OU array de partes tipadas.
  */
-export function unwrapContent(envelope: GatewayEnvelope): any {
+export function unwrapContent(envelope: GatewayEnvelope): unknown {
   if (!envelope.ok) {
     throw new Error(envelope.error ?? 'Gateway call failed');
   }
@@ -75,7 +75,7 @@ export class OpenClawClient {
     }
   }
 
-  async invoke(tool: string, args: Record<string, any> = {}): Promise<any> {
+  async invoke(tool: string, args: Record<string, unknown> = {}): Promise<unknown> {
     const url = `${this.gatewayUrl.replace(/\/$/, '')}/tools/invoke`;
     const res = await fetch(url, {
       method: 'POST',

@@ -2,26 +2,34 @@
 
 import React, { useState } from 'react';
 import { api } from '../../src/lib/api';
+import { t } from "../../src/lib/i18n";
 
-type ToolResult = { ok: boolean; result?: any; error?: string };
+type ToolResult = { ok: boolean; result?: unknown; error?: string };
 
 export default function ToolsPanel() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [results, setResults] = useState<Record<string, ToolResult>>({});
   const [query, setQuery] = useState('');
 
-  const runTool = async (tool: string, args: any = {}) => {
+  const runTool = async (tool: string, args: Record<string, unknown> = {}) => {
     const key = `${tool}-${Date.now()}`;
     setLoading({ ...loading, [key]: true });
-    setResults({ ...results, [key]: { ok: false } });
 
     try {
       const res = await api.invokeTool(tool, args);
-      setResults({ ...results, [key]: { ok: true, result: res } });
-    } catch (err: any) {
-      setResults({ ...results, [key]: { ok: false, error: err.message } });
+      setResults(prev => ({ ...prev, [key]: { ok: true, result: res } }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setResults(prev => ({ ...prev, [key]: { ok: false, error: msg } }));
     } finally {
-      setLoading({ ...loading, [key]: false });
+      setLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleSearch = () => {
+    if (query) {
+      runTool('web_search', { query });
+      setQuery('');
     }
   };
 
@@ -29,72 +37,63 @@ export default function ToolsPanel() {
 
   return (
     <div className="mc-tools-panel">
-      <h3 className="mc-section-title">Tools Rápidas</h3>
+      <h3 className="mc-section-title">{t("Tools Rápidas")}</h3>
 
       <div className="mc-tools-grid">
         {/* Status */}
-        <button 
-          className="mc-tool-btn" 
+        <button
+          className="mc-tool-btn"
           onClick={() => runTool('session_status')}
-          disabled={loading.session_status}
+          disabled={Object.values(loading).some(v => v)}
         >
-          📊 Status
+          📊 {t("Status")}
         </button>
 
         {/* Sessions */}
-        <button 
-          className="mc-tool-btn" 
+        <button
+          className="mc-tool-btn"
           onClick={() => runTool('sessions_list', { limit: 10 })}
-          disabled={loading.sessions_list}
+          disabled={Object.values(loading).some(v => v)}
         >
-          👥 Sessões
-        </button>
-
-        {/* Subagents */}
-        <button 
-          className="mc-tool-btn" 
-          onClick={() => runTool('subagents', { action: 'list' })}
-          disabled={loading.subagents}
-        >
-          🐛 Sub-Agents
+          👥 {t("Sessões")}
         </button>
 
         {/* Web Search */}
         <div className="mc-tool-input-group">
+          <label className="sr-only" htmlFor="tool-search-input">{t("Pesquisa Tática")}</label>
           <input
+            id="tool-search-input"
             type="text"
             className="mc-input"
-            placeholder="Pesquisar web..."
+            placeholder={t("Pesquisar web...")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+            aria-label={t("Pesquisar na web")}
           />
-          <button 
+          <button
             className="mc-tool-btn mc-tool-search"
-            onClick={() => {
-              if (query) runTool('web_search', { query });
-              setQuery('');
-            }}
-            disabled={!query || loading.web_search}
+            onClick={handleSearch}
+            disabled={!query || Object.values(loading).some(v => v)}
+            aria-label={t("Buscar")}
           >
             🔍
           </button>
         </div>
-
-        {/* Spawn Subagent */}
-        <div className="mc-tool-input-group">
-          <input
-            type="text"
-            className="mc-input"
-            placeholder="Task pro sub-agent..."
-            onKeyPress={(e) => e.key === 'Enter' && runTool('sessions_spawn', { task: e.currentTarget.value, runtime: 'subagent' })}
-          />
-        </div>
       </div>
 
       <div className="mc-tools-results">
-        <button className="mc-btn mc-btn-secondary mc-btn-sm" onClick={clearResults}>Limpar</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span className="mono" style={{ fontSize: 10 }}>{t("Resultados")}</span>
+          <button className="mc-btn mc-btn-secondary mc-btn-sm" onClick={clearResults}>{t("Limpar")}</button>
+        </div>
+
+        {Object.entries(results).length === 0 && (
+          <div className="mc-empty" style={{ padding: 12 }}>{t("Nenhum resultado")}</div>
+        )}
+
         {Object.entries(results).map(([key, res]) => (
-          <details key={key} className={`mc-tool-result ${res.ok ? 'mc-tool-ok' : 'mc-tool-err'}`}>
+          <details key={key} className={`mc-tool-result ${res.ok ? 'mc-tool-ok' : 'mc-tool-err'}`} open>
             <summary>{key.split('-')[0].toUpperCase()}</summary>
             <pre className="mono mc-tool-output">{JSON.stringify(res.result || res.error, null, 2)}</pre>
           </details>
@@ -141,35 +140,42 @@ export default function ToolsPanel() {
           min-width: 40px;
         }
         .mc-tools-results {
-          max-height: 200px;
+          max-height: 240px;
           overflow-y: auto;
           border: 1px solid var(--mc-border);
           border-radius: 2px;
           padding: 8px;
+          background: var(--mc-bg-deep);
         }
         .mc-tool-result {
           margin-bottom: 8px;
         }
         .mc-tool-result summary {
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 600;
           cursor: pointer;
           padding: 4px;
+          border-bottom: 1px solid var(--mc-border);
         }
         .mc-tool-ok summary { color: var(--mc-online); }
         .mc-tool-err summary { color: var(--mc-offline); }
         .mc-tool-output {
-          font-size: 11px;
-          max-height: 120px;
+          font-size: 10px;
+          max-height: 150px;
           overflow-y: auto;
-          background: var(--mc-bg-deep);
           padding: 8px;
-          border-radius: 2px;
-          margin-top: 4px;
+          margin: 0;
+          white-space: pre-wrap;
+          word-break: break-all;
         }
         .mc-btn-sm {
-          padding: 4px 8px;
+          padding: 2px 6px;
+          font-size: 10px;
+        }
+        .mc-empty {
+          color: var(--mc-text-muted);
           font-size: 11px;
+          text-align: center;
         }
         @media (max-width: 640px) {
           .mc-tools-grid {

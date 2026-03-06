@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(require('child_process').exec);
+const execAsync = promisify(exec);
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -29,7 +29,8 @@ export async function GET(request: Request) {
     const logLines = logs.trim().split('\n').filter(Boolean);
 
     return NextResponse.json({ logs: logLines });
-  } catch (error: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     console.error('Logs error:', error);
     return NextResponse.json({ logs: [], error: error.message }, { status: 500 });
   }

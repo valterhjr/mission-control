@@ -1,5 +1,5 @@
 // Client-side helper: chama /api/tools/invoke (server-side proxy)
-export async function invokeTool(tool: string, args: Record<string, any> = {}): Promise<any> {
+export async function invokeTool(tool: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const res = await fetch('/api/tools/invoke', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
