@@ -20,10 +20,10 @@ type Column = {
 };
 
 const COLUMN_CONFIGS = () => [
-  { id: "backlog", title: t("Backlog"), color: "var(--mc-text-muted)" },
-  { id: "in_progress", title: t("Em Progresso"), color: "var(--mc-accent)" },
-  { id: "review", title: t("Revisão"), color: "var(--mc-warning)" },
-  { id: "done", title: t("Concluído"), color: "var(--mc-online)" },
+  { id: "backlog", title: t("Disponíveis (Standby)"), color: "var(--mc-text-muted)" },
+  { id: "in_progress", title: t("Em Execução"), color: "var(--mc-online)" },
+  { id: "review", title: t("Pausados / Aguardando"), color: "var(--mc-warning)" },
+  { id: "done", title: t("Finalizados"), color: "var(--mc-accent)" },
 ];
 
 type ApiType = Record<string, (...args: unknown[]) => Promise<unknown>>;
