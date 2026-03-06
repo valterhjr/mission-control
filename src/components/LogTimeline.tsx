@@ -48,7 +48,7 @@ export default function LogTimeline() {
   const isError = (log: string) => /error|fail|warn/i.test(log);
 
   return (
-    <div className="mc-log-timeline">
+    <div className="mc-log-timeline" ref={containerRef}>
       <div className="mc-log-search">
         <label className="sr-only" htmlFor="log-filter-input">{t("Filtrar Registros")}</label>
         <input

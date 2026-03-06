@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../src/lib/api";
 import { t } from "../../src/lib/i18n";
+import { AGENT_ONLINE_MS } from "../../src/lib/constants";
 
 type Agent = {
   id: string;
@@ -19,6 +20,12 @@ type ApiType = Record<string, (...args: unknown[]) => Promise<unknown>>;
 export default function AgentesPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     document.title = t("Gerenciar Agentes — Mission Control");
@@ -47,8 +54,8 @@ export default function AgentesPage() {
             function: (ca.function as string) || "General",
             model: (ca.model as string) || "unknown",
             workerVersion: (ca.workerVersion as string) || "1.0.0",
-            status: s && (s.updatedAt as number) && (Date.now() - (s.updatedAt as number) < 120000) ? "Online" : "Offline",
-            online: !!(s && (s.updatedAt as number) && Date.now() - (s.updatedAt as number) < 120000)
+            status: s && (s.updatedAt as number) && (Date.now() - (s.updatedAt as number) < AGENT_ONLINE_MS) ? "Online" : "Offline",
+            online: !!(s && (s.updatedAt as number) && Date.now() - (s.updatedAt as number) < AGENT_ONLINE_MS)
           };
         });
         setAgents(mapped);
@@ -64,39 +71,22 @@ export default function AgentesPage() {
     loadAgents();
   }, []);
 
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "Gerenciar Agentes",
-    "description": "Painel de configuração e monitoramento de agentes de IA.",
-    "author": {
-      "@type": "Organization",
-      "name": "OpenClaw"
-    }
-  };
-
   return (
     <div className="mc-agentes">
       <title>{t("Gerenciar Agentes — Mission Control")}</title>
-      <meta name="description" content={t("Gerencie as configurações e comportamentos de seus agentes de IA")} />
-      <meta name="author" content="OpenClaw" />
-      <meta property="og:title" content={t("Gerenciar Agentes — Mission Control")} />
-      <meta property="og:description" content={t("Gerencie as configurações e comportamentos de seus agentes de IA")} />
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
+      {toast && (
+        <div className="mc-alert mc-alert-info" style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, minWidth: 260 }}>
+          {toast}
+        </div>
+      )}
 
       <header className="mc-agentes-header mc-animate-in">
         <h1 className="mc-agentes-title">{t("Gerenciar Agentes")}</h1>
         <button
           className="mc-btn mc-btn-primary"
-          onClick={() => {
-            // Not implemented yet
-            alert(t("Funcionalidade em desenvolvimento"));
-          }}
-          onKeyDown={(e) => { if (e.key === 'Enter') alert(t("Funcionalidade em desenvolvimento")); }}
+          onClick={() => showToast(t("Funcionalidade em desenvolvimento"))}
+          onKeyDown={(e) => { if (e.key === 'Enter') showToast(t("Funcionalidade em desenvolvimento")); }}
         >
           + {t("Novo Agente")}
         </button>
@@ -144,9 +134,7 @@ export default function AgentesPage() {
                     <td>
                       <button
                         className="mc-btn mc-btn-secondary mc-btn-sm"
-                        onClick={() => {
-                          alert(t("Edição em desenvolvimento"));
-                        }}
+                        onClick={() => showToast(t("Edição em desenvolvimento"))}
                       >
                         {t("Editar")}
                       </button>
@@ -172,7 +160,7 @@ export default function AgentesPage() {
       </section>
 
       <footer className="mc-dashboard-footer" style={{ marginTop: 40, opacity: 0.5, fontSize: 11 }}>
-        <p>© 2025 OpenClaw — {t("Escrito por")} OpenClaw Team. {t("Atualizado em")} 06/03/2026.</p>
+        <p>© {new Date().getFullYear()} OpenClaw — {t("Escrito por")} OpenClaw Team.</p>
       </footer>
 
       <style>{`

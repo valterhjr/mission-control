@@ -3,11 +3,13 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../src/lib/api";
 import { t } from "../src/lib/i18n";
+import { AGENT_ONLINE_MS } from "../src/lib/constants";
 import AgentCard from "../src/components/AgentCard";
 import KanbanBoard from "../src/components/KanbanBoard";
 import LogTimeline from "../src/components/LogTimeline";
 import ConfigEditor from "../src/components/ConfigEditor";
 import ToolsPanel from "../src/components/ToolsPanel";
+import ErrorBoundary from "../src/components/ErrorBoundary";
 
 type Agent = {
   name: string;
@@ -41,7 +43,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
 
-    (async () => {
+    const loadData = async () => {
       try {
         const [result, cronResult, configResult] = (await Promise.all([
           (api as ApiType).getSessions?.(20),
@@ -83,7 +85,7 @@ export default function Home() {
           mapped = configResult.agents.map((ca: Record<string, string>) => {
             const session = sessionByAgentId.get(ca.id);
             const updatedAt = session ? (session.updatedAt as number) || 0 : 0;
-            const isOnline = updatedAt > 0 && Date.now() - updatedAt < 120000;
+            const isOnline = updatedAt > 0 && Date.now() - updatedAt < AGENT_ONLINE_MS;
             const key = session ? (session.key as string) || "" : "";
             const isCron = key.includes("cron:") || !!ca.hasHeartbeat;
 
@@ -102,7 +104,7 @@ export default function Home() {
           mapped = sessions.map((s) => {
             const key = (s.key as string) || "";
             const updatedAt = (s.updatedAt as number) || 0;
-            const isOnline = updatedAt > 0 && Date.now() - updatedAt < 120000;
+            const isOnline = updatedAt > 0 && Date.now() - updatedAt < AGENT_ONLINE_MS;
             const isCron = key.includes("cron:");
 
             return {
@@ -136,8 +138,14 @@ export default function Home() {
       } finally {
         if (mounted) setLoading(false);
       }
-    })();
-    return () => { mounted = false; };
+    };
+
+    loadData();
+    const interval = setInterval(loadData, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const statCards = [
@@ -158,32 +166,9 @@ export default function Home() {
     },
   ];
 
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Mission Control",
-    "applicationCategory": "Dashboard",
-    "operatingSystem": "Web",
-    "author": {
-      "@type": "Organization",
-      "name": "OpenClaw"
-    },
-    "description": "Centro de comando tático para orquestração de agentes de inteligência artificial.",
-    "softwareVersion": "1.2.0"
-  };
-
   return (
     <div className="mc-dashboard" aria-label={t("Painel de Controle de Operações")}>
       <title>{t("Painel de Controle — Mission Control")}</title>
-      <meta name="description" content={t("Acompanhe o status e a atividade de seus agentes em tempo real")} />
-      <meta name="author" content="OpenClaw" />
-      <meta property="og:title" content={t("Painel de Controle — Mission Control")} />
-      <meta property="og:description" content={t("Acompanhe o status e a atividade de seus agentes em tempo real")} />
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
 
       {/* ── Header ── */}
       <header className="mc-dashboard-header mc-animate-in">
@@ -275,11 +260,11 @@ export default function Home() {
         <div className="mc-grid-cols-2">
           <div className="mc-card-static mc-dashboard-section">
             <h2 className="mc-section-title">{t("Configurações")}</h2>
-            <ConfigEditor />
+            <ErrorBoundary label="ConfigEditor"><ConfigEditor /></ErrorBoundary>
           </div>
           <div className="mc-card-static mc-dashboard-section" style={{ marginTop: 'var(--mc-space-md)' }}>
             <h2 className="mc-section-title">{t("Ferramentas Rápidas")}</h2>
-            <ToolsPanel />
+            <ErrorBoundary label="ToolsPanel"><ToolsPanel /></ErrorBoundary>
           </div>
         </div>
       </section>
@@ -288,7 +273,7 @@ export default function Home() {
       <section className="mc-dashboard-grid mc-animate-in mc-stagger-3">
         <div className="mc-card-static mc-dashboard-section mc-dashboard-section-wide">
           <h2 className="mc-section-title">{t("Fluxo de Trabalho (Kanban)")}</h2>
-          <KanbanBoard />
+          <ErrorBoundary label="KanbanBoard"><KanbanBoard /></ErrorBoundary>
         </div>
 
         <div className="mc-dashboard-grid mc-subgrid">
@@ -297,13 +282,13 @@ export default function Home() {
               {t("Linha do Tempo de Logs")}
               <span className="mc-dot mc-dot-online" style={{ marginLeft: 8 }} />
             </h2>
-            <LogTimeline />
+            <ErrorBoundary label="LogTimeline"><LogTimeline /></ErrorBoundary>
           </div>
         </div>
       </section>
 
       <footer className="mc-dashboard-footer" style={{ marginTop: 40, opacity: 0.5, fontSize: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p>© 2025 OpenClaw — {t("Escrito por")} OpenClaw Team. {t("Atualizado em")} 06/03/2026.</p>
+        <p>© {new Date().getFullYear()} OpenClaw — {t("Escrito por")} OpenClaw Team.</p>
         <div className="mc-security-badge mono" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--mc-online)' }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>

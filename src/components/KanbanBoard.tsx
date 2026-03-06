@@ -37,6 +37,7 @@ export default function KanbanBoard() {
     fromColumn: string;
   } | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const manualOverrides = React.useRef<Map<string, string>>(new Map());
 
   const loadSessions = useCallback(async () => {
     try {
@@ -128,11 +129,25 @@ export default function KanbanBoard() {
         });
       }
 
+      // Apply manual overrides: move tasks to user-chosen columns
+      const buckets: Record<string, Task[]> = {
+        backlog, in_progress: inProgress, review, done,
+      };
+      const allTasks = [...backlog, ...inProgress, ...review, ...done];
+      manualOverrides.current.forEach((targetCol, taskId) => {
+        const task = allTasks.find(t => t.id === taskId);
+        if (!task || !buckets[targetCol]) return;
+        for (const col of Object.keys(buckets)) {
+          buckets[col] = buckets[col].filter(t => t.id !== taskId);
+        }
+        buckets[targetCol].push(task);
+      });
+
       setColumns([
-        { ...COLUMN_CONFIGS()[0], tasks: backlog },
-        { ...COLUMN_CONFIGS()[1], tasks: inProgress },
-        { ...COLUMN_CONFIGS()[2], tasks: review },
-        { ...COLUMN_CONFIGS()[3], tasks: done },
+        { ...COLUMN_CONFIGS()[0], tasks: buckets.backlog },
+        { ...COLUMN_CONFIGS()[1], tasks: buckets.in_progress },
+        { ...COLUMN_CONFIGS()[2], tasks: buckets.review },
+        { ...COLUMN_CONFIGS()[3], tasks: buckets.done },
       ]);
     } catch (err) {
       console.error("Kanban load error:", err);
@@ -141,11 +156,11 @@ export default function KanbanBoard() {
 
   useEffect(() => {
     let mounted = true;
-    const fetch = async () => {
+    const loadData = async () => {
       if (!mounted) return;
       await loadSessions();
     };
-    fetch();
+    loadData();
     const interval = setInterval(loadSessions, 10000);
     return () => {
       mounted = false;
@@ -179,6 +194,8 @@ export default function KanbanBoard() {
 
     const { taskId, fromColumn } = draggedTask;
     if (fromColumn === toColumnId) return;
+
+    manualOverrides.current.set(taskId, toColumnId);
 
     setColumns((prev) =>
       prev.map((col) => {

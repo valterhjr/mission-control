@@ -13,7 +13,7 @@ export default function ToolsPanel() {
 
   const runTool = async (tool: string, args: Record<string, unknown> = {}) => {
     const key = `${tool}-${Date.now()}`;
-    setLoading({ ...loading, [key]: true });
+    setLoading(prev => ({ ...prev, [key]: true }));
 
     try {
       const res = await api.invokeTool(tool, args);
@@ -37,8 +37,6 @@ export default function ToolsPanel() {
 
   return (
     <div className="mc-tools-panel">
-      <h3 className="mc-section-title">{t("Tools Rápidas")}</h3>
-
       <div className="mc-tools-grid">
         {/* Status */}
         <button

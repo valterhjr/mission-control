@@ -1,32 +1,50 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
 
-const execAsync = promisify(exec);
+const LOG_DIR = '/tmp/openclaw';
+const LOG_PATTERN = /^openclaw-.*\.log$/;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const lines = parseInt(searchParams.get('lines') || '50');
+  const lines = Math.min(Math.max(parseInt(searchParams.get('lines') || '50'), 1), 500);
   const filter = searchParams.get('filter') || '';
 
   try {
-    // Find latest log file
-    const lsCmd = `ls -t /tmp/openclaw/openclaw-*.log 2>/dev/null | head -1`;
-    const { stdout: latestLog } = await execAsync(lsCmd);
-    const logPath = latestLog.trim();
-
-    if (!logPath) {
+    // Find latest log file using fs — no shell involved
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(LOG_DIR, { withFileTypes: true });
+    } catch {
       return NextResponse.json({ logs: [] });
     }
 
-    // Tail logs
-    let tailCmd = `tail -n ${lines} "${logPath}"`;
-    if (filter) {
-      tailCmd += ` | grep -i "${filter.replace(/"/g, '\\"')}"`;
+    const logFiles = entries
+      .filter(e => e.isFile() && LOG_PATTERN.test(e.name))
+      .map(e => ({
+        name: e.name,
+        mtime: fs.statSync(path.join(LOG_DIR, e.name)).mtimeMs,
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+
+    if (logFiles.length === 0) {
+      return NextResponse.json({ logs: [] });
     }
 
-    const { stdout: logs } = await execAsync(tailCmd, { timeout: 5000 });
-    const logLines = logs.trim().split('\n').filter(Boolean);
+    const logPath = path.join(LOG_DIR, logFiles[0].name);
+
+    // Read file content — no shell interpolation
+    const content = fs.readFileSync(logPath, 'utf8');
+    let logLines = content.split('\n').filter(Boolean);
+
+    // Filter in JS — no grep, no injection risk
+    if (filter) {
+      const filterLower = filter.toLowerCase();
+      logLines = logLines.filter(line => line.toLowerCase().includes(filterLower));
+    }
+
+    // Take last N lines
+    logLines = logLines.slice(-lines);
 
     return NextResponse.json({ logs: logLines });
   } catch (err: unknown) {
