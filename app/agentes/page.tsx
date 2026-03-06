@@ -30,15 +30,15 @@ type ApiType = Record<string, (...args: unknown[]) => Promise<unknown>>;
 export default function AgentesPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; title: string; desc?: string } | null>(null);
   const [modal, setModal] = useState<{ mode: 'new' | 'edit'; form: FormData } | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+  const showToast = (title: string, type: 'success' | 'error' | 'info' = 'info', desc?: string) => {
+    setToast({ type, title, desc });
+    setTimeout(() => setToast(null), 4000);
   };
 
   const openNew = () => setModal({
@@ -62,7 +62,7 @@ export default function AgentesPage() {
 
   const saveAgent = async () => {
     if (!modal) return;
-    if (!modal.form.id.trim()) { showToast(t('ID é obrigatório')); return; }
+    if (!modal.form.id.trim()) { showToast(t('ID é obrigatório'), 'error'); return; }
     setSaving(true);
     try {
       const method = modal.mode === 'new' ? 'POST' : 'PATCH';
@@ -73,11 +73,11 @@ export default function AgentesPage() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || t('Erro ao salvar'));
-      showToast(modal.mode === 'new' ? t('Agente criado com sucesso') : t('Agente atualizado com sucesso'));
+      showToast(modal.mode === 'new' ? t('Agente criado com sucesso') : t('Agente atualizado com sucesso'), 'success');
       setModal(null);
       loadAgents();
     } catch (err) {
-      showToast((err as Error).message);
+      showToast(t('Erro ao salvar'), 'error', (err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -93,15 +93,18 @@ export default function AgentesPage() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || t('Erro ao excluir'));
 
-      const parts: string[] = [];
-      if (data.deleted?.length) parts.push(`${t('Removido')}: ${data.deleted.join(', ')}`);
-      if (data.failed?.length) parts.push(`${t('Falhou')}: ${data.failed.map((f: { path: string }) => f.path).join(', ')}`);
+      if (data.failed?.length) {
+        const failedPaths = data.failed.map((f: { path: string }) => f.path).join(', ');
+        showToast(t('Agente excluído com avisos'), 'error', `${t('Não foi possível remover')}: ${failedPaths}`);
+      } else {
+        const deletedCount = data.deleted?.length ?? 0;
+        showToast(t('Agente excluído com sucesso'), 'success', deletedCount > 0 ? `${deletedCount} ${t('diretório(s) removido(s)')}` : undefined);
+      }
 
-      showToast(parts.length ? parts.join(' | ') : t('Agente excluído com sucesso'));
       setDeleteConfirm(null);
       loadAgents();
     } catch (err) {
-      showToast((err as Error).message);
+      showToast(t('Erro ao excluir agente'), 'error', (err as Error).message);
     } finally {
       setDeleting(false);
     }
@@ -158,8 +161,14 @@ export default function AgentesPage() {
       <title>{t("Gerenciar Agentes — Mission Control")}</title>
 
       {toast && (
-        <div className="mc-alert mc-alert-info" style={{ position: 'fixed', top: 16, right: 16, zIndex: 1001, minWidth: 260 }}>
-          {toast}
+        <div className={`mc-toast mc-toast-${toast.type}`} role="status" aria-live="polite">
+          <span className="mc-toast-icon">
+            {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
+          </span>
+          <div className="mc-toast-body">
+            <span className="mc-toast-title">{toast.title}</span>
+            {toast.desc && <span className="mc-toast-desc">{toast.desc}</span>}
+          </div>
         </div>
       )}
 
