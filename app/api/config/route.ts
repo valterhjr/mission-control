@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, rm, access } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -87,6 +87,56 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to save config';
+        return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id?.trim()) {
+        return NextResponse.json({ ok: false, error: 'id é obrigatório' }, { status: 400 });
+    }
+
+    try {
+        const raw = await readFile(CONFIG_PATH, 'utf-8');
+        const config = JSON.parse(raw);
+        const list: ConfigAgent[] = config.agents?.list ?? [];
+
+        const idx = list.findIndex((a) => a.id === id);
+        if (idx === -1) {
+            return NextResponse.json({ ok: false, error: 'Agente não encontrado' }, { status: 404 });
+        }
+
+        const agent = list[idx];
+
+        // Remove from config first
+        list.splice(idx, 1);
+        config.agents = { ...(config.agents ?? {}), list };
+        await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+
+        // Delete physical directories
+        const deleted: string[] = [];
+        const failed: { path: string; error: string }[] = [];
+
+        const tryDelete = async (dirPath: string | undefined) => {
+            if (!dirPath) return;
+            try {
+                await access(dirPath); // check it exists before deleting
+                await rm(dirPath, { recursive: true, force: true });
+                deleted.push(dirPath);
+            } catch (err) {
+                failed.push({ path: dirPath, error: (err as Error).message });
+            }
+        };
+
+        await tryDelete(agent.agentDir);
+        await tryDelete(agent.workspace);
+
+        return NextResponse.json({ ok: true, deleted, failed });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to delete agent';
         return NextResponse.json({ ok: false, error: message }, { status: 500 });
     }
 }

@@ -33,6 +33,8 @@ export default function AgentesPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: 'new' | 'edit'; form: FormData } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Agent | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -78,6 +80,30 @@ export default function AgentesPage() {
       showToast((err as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteAgent = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/config?id=${encodeURIComponent(deleteConfirm.id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || t('Erro ao excluir'));
+
+      const parts: string[] = [];
+      if (data.deleted?.length) parts.push(`${t('Removido')}: ${data.deleted.join(', ')}`);
+      if (data.failed?.length) parts.push(`${t('Falhou')}: ${data.failed.map((f: { path: string }) => f.path).join(', ')}`);
+
+      showToast(parts.length ? parts.join(' | ') : t('Agente excluído com sucesso'));
+      setDeleteConfirm(null);
+      loadAgents();
+    } catch (err) {
+      showToast((err as Error).message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -214,6 +240,59 @@ export default function AgentesPage() {
         </div>
       )}
 
+      {deleteConfirm && (
+        <div className="mc-modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="mc-modal mc-modal-danger" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="mc-modal-header">
+              <h2 className="mc-modal-title">{t('Confirmar Exclusão')}</h2>
+              <button className="mc-modal-close" onClick={() => setDeleteConfirm(null)} aria-label={t('Fechar')}>✕</button>
+            </div>
+
+            <div className="mc-modal-body">
+              <p style={{ fontSize: 14, color: 'var(--mc-text-secondary)' }}>
+                {t('Você está prestes a excluir permanentemente o agente')}:
+              </p>
+              <div className="mc-delete-agent-name">
+                <span className="mc-dot mc-dot-offline" />
+                <strong>{deleteConfirm.name}</strong>
+                <span className="mono" style={{ fontSize: 11, color: 'var(--mc-text-muted)' }}>({deleteConfirm.id})</span>
+              </div>
+
+              {(deleteConfirm.agentDir || deleteConfirm.workspace) && (
+                <div className="mc-delete-paths">
+                  <p className="mc-label" style={{ marginBottom: 8 }}>{t('Arquivos e pastas que serão excluídos')}:</p>
+                  {deleteConfirm.agentDir && (
+                    <div className="mc-delete-path mono">
+                      <span className="mc-delete-path-icon">🗂</span>
+                      {deleteConfirm.agentDir}
+                    </div>
+                  )}
+                  {deleteConfirm.workspace && (
+                    <div className="mc-delete-path mono">
+                      <span className="mc-delete-path-icon">📁</span>
+                      {deleteConfirm.workspace}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="mc-alert mc-alert-error" style={{ marginTop: 8, fontSize: 12 }}>
+                ⚠ {t('Esta ação é irreversível. Os arquivos físicos serão deletados permanentemente.')}
+              </div>
+            </div>
+
+            <div className="mc-modal-footer">
+              <button className="mc-btn mc-btn-secondary" onClick={() => setDeleteConfirm(null)} disabled={deleting}>
+                {t('Cancelar')}
+              </button>
+              <button className="mc-btn mc-btn-danger" onClick={deleteAgent} disabled={deleting}>
+                {deleting ? t('Excluindo...') : t('Excluir Permanentemente')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="mc-agentes-header mc-animate-in">
         <h1 className="mc-agentes-title">{t("Gerenciar Agentes")}</h1>
         <button
@@ -265,12 +344,20 @@ export default function AgentesPage() {
                       </span>
                     </td>
                     <td>
-                      <button
-                        className="mc-btn mc-btn-secondary mc-btn-sm"
-                        onClick={() => openEdit(agent)}
-                      >
-                        {t("Editar")}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          className="mc-btn mc-btn-secondary mc-btn-sm"
+                          onClick={() => openEdit(agent)}
+                        >
+                          {t("Editar")}
+                        </button>
+                        <button
+                          className="mc-btn mc-btn-danger mc-btn-sm"
+                          onClick={() => setDeleteConfirm(agent)}
+                        >
+                          {t("Excluir")}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -479,6 +566,56 @@ export default function AgentesPage() {
         input:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+        }
+
+        .mc-btn-danger {
+          background: transparent;
+          border: 1px solid var(--mc-offline);
+          color: var(--mc-offline);
+        }
+
+        .mc-btn-danger:hover:not(:disabled) {
+          background: rgba(255, 80, 80, 0.1);
+        }
+
+        .mc-btn-danger:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .mc-modal-danger .mc-modal-header {
+          border-left: 3px solid var(--mc-offline);
+        }
+
+        .mc-delete-agent-name {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 16px;
+          background: var(--mc-bg-deep);
+          border: 1px solid var(--mc-border);
+          border-radius: 2px;
+          font-size: 14px;
+        }
+
+        .mc-delete-paths {
+          padding: 12px 16px;
+          background: var(--mc-bg-deep);
+          border: 1px solid var(--mc-border);
+          border-radius: 2px;
+        }
+
+        .mc-delete-path {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          color: var(--mc-text-secondary);
+          padding: 4px 0;
+        }
+
+        .mc-delete-path-icon {
+          font-size: 14px;
         }
       `}</style>
     </div>
