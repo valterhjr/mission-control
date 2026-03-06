@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -48,6 +48,79 @@ export async function GET() {
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to read config';
+        return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
+}
+
+type AgentBody = {
+    id: string;
+    name?: string;
+    model?: string;
+    workspace?: string;
+    agentDir?: string;
+};
+
+export async function POST(request: Request) {
+    try {
+        const body: AgentBody = await request.json();
+        if (!body.id?.trim()) {
+            return NextResponse.json({ ok: false, error: 'id é obrigatório' }, { status: 400 });
+        }
+
+        const raw = await readFile(CONFIG_PATH, 'utf-8');
+        const config = JSON.parse(raw);
+        const list: ConfigAgent[] = config.agents?.list ?? [];
+
+        if (list.find((a) => a.id === body.id)) {
+            return NextResponse.json({ ok: false, error: 'Agente já existe' }, { status: 409 });
+        }
+
+        const newAgent: ConfigAgent = { id: body.id };
+        if (body.name) newAgent.name = body.name;
+        if (body.model) newAgent.model = body.model;
+        if (body.workspace) newAgent.workspace = body.workspace;
+        if (body.agentDir) newAgent.agentDir = body.agentDir;
+
+        config.agents = { ...(config.agents ?? {}), list: [...list, newAgent] };
+        await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+
+        return NextResponse.json({ ok: true });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to save config';
+        return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: Request) {
+    try {
+        const body: AgentBody = await request.json();
+        if (!body.id?.trim()) {
+            return NextResponse.json({ ok: false, error: 'id é obrigatório' }, { status: 400 });
+        }
+
+        const raw = await readFile(CONFIG_PATH, 'utf-8');
+        const config = JSON.parse(raw);
+        const list: ConfigAgent[] = config.agents?.list ?? [];
+
+        const idx = list.findIndex((a) => a.id === body.id);
+        if (idx === -1) {
+            return NextResponse.json({ ok: false, error: 'Agente não encontrado' }, { status: 404 });
+        }
+
+        list[idx] = {
+            ...list[idx],
+            ...(body.name !== undefined && { name: body.name }),
+            ...(body.model !== undefined && { model: body.model }),
+            ...(body.workspace !== undefined && { workspace: body.workspace }),
+            ...(body.agentDir !== undefined && { agentDir: body.agentDir }),
+        };
+
+        config.agents = { ...(config.agents ?? {}), list };
+        await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+
+        return NextResponse.json({ ok: true });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to save config';
         return NextResponse.json({ ok: false, error: message }, { status: 500 });
     }
 }

@@ -13,6 +13,16 @@ type Agent = {
   workerVersion: string;
   status: string;
   online: boolean;
+  workspace?: string;
+  agentDir?: string;
+};
+
+type FormData = {
+  id: string;
+  name: string;
+  model: string;
+  workspace: string;
+  agentDir: string;
 };
 
 type ApiType = Record<string, (...args: unknown[]) => Promise<unknown>>;
@@ -21,10 +31,54 @@ export default function AgentesPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [modal, setModal] = useState<{ mode: 'new' | 'edit'; form: FormData } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const openNew = () => setModal({
+    mode: 'new',
+    form: { id: '', name: '', model: '', workspace: '', agentDir: '' },
+  });
+
+  const openEdit = (agent: Agent) => setModal({
+    mode: 'edit',
+    form: {
+      id: agent.id,
+      name: agent.name,
+      model: agent.model,
+      workspace: agent.workspace ?? '',
+      agentDir: agent.agentDir ?? '',
+    },
+  });
+
+  const updateForm = (field: keyof FormData, value: string) =>
+    setModal(m => m ? { ...m, form: { ...m.form, [field]: value } } : null);
+
+  const saveAgent = async () => {
+    if (!modal) return;
+    if (!modal.form.id.trim()) { showToast(t('ID é obrigatório')); return; }
+    setSaving(true);
+    try {
+      const method = modal.mode === 'new' ? 'POST' : 'PATCH';
+      const res = await fetch('/api/config', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(modal.form),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || t('Erro ao salvar'));
+      showToast(modal.mode === 'new' ? t('Agente criado com sucesso') : t('Agente atualizado com sucesso'));
+      setModal(null);
+      loadAgents();
+    } catch (err) {
+      showToast((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -54,6 +108,8 @@ export default function AgentesPage() {
             function: (ca.function as string) || "General",
             model: (ca.model as string) || "unknown",
             workerVersion: (ca.workerVersion as string) || "1.0.0",
+            workspace: (ca.workspace as string) || "",
+            agentDir: (ca.agentDir as string) || "",
             status: s && (s.updatedAt as number) && (Date.now() - (s.updatedAt as number) < AGENT_ONLINE_MS) ? "Online" : "Offline",
             online: !!(s && (s.updatedAt as number) && Date.now() - (s.updatedAt as number) < AGENT_ONLINE_MS)
           };
@@ -76,8 +132,85 @@ export default function AgentesPage() {
       <title>{t("Gerenciar Agentes — Mission Control")}</title>
 
       {toast && (
-        <div className="mc-alert mc-alert-info" style={{ position: 'fixed', top: 16, right: 16, zIndex: 1000, minWidth: 260 }}>
+        <div className="mc-alert mc-alert-info" style={{ position: 'fixed', top: 16, right: 16, zIndex: 1001, minWidth: 260 }}>
           {toast}
+        </div>
+      )}
+
+      {modal && (
+        <div className="mc-modal-overlay" onClick={() => setModal(null)}>
+          <div className="mc-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="mc-modal-header">
+              <h2 className="mc-modal-title">
+                {modal.mode === 'new' ? t('Novo Agente') : t('Editar Agente')}
+              </h2>
+              <button className="mc-modal-close" onClick={() => setModal(null)} aria-label={t('Fechar')}>✕</button>
+            </div>
+
+            <div className="mc-modal-body">
+              <div className="mc-form-field">
+                <label className="mc-label" htmlFor="field-id">ID *</label>
+                <input
+                  id="field-id"
+                  className="mc-input mono"
+                  value={modal.form.id}
+                  onChange={e => updateForm('id', e.target.value)}
+                  placeholder="meu-agente"
+                  readOnly={modal.mode === 'edit'}
+                  disabled={modal.mode === 'edit'}
+                />
+              </div>
+              <div className="mc-form-field">
+                <label className="mc-label" htmlFor="field-name">{t('Nome')}</label>
+                <input
+                  id="field-name"
+                  className="mc-input"
+                  value={modal.form.name}
+                  onChange={e => updateForm('name', e.target.value)}
+                  placeholder={t('Nome de exibição')}
+                />
+              </div>
+              <div className="mc-form-field">
+                <label className="mc-label" htmlFor="field-model">{t('Modelo')}</label>
+                <input
+                  id="field-model"
+                  className="mc-input mono"
+                  value={modal.form.model}
+                  onChange={e => updateForm('model', e.target.value)}
+                  placeholder="claude-sonnet-4-6"
+                />
+              </div>
+              <div className="mc-form-field">
+                <label className="mc-label" htmlFor="field-workspace">Workspace</label>
+                <input
+                  id="field-workspace"
+                  className="mc-input mono"
+                  value={modal.form.workspace}
+                  onChange={e => updateForm('workspace', e.target.value)}
+                  placeholder="/caminho/do/workspace"
+                />
+              </div>
+              <div className="mc-form-field">
+                <label className="mc-label" htmlFor="field-agentdir">Agent Dir</label>
+                <input
+                  id="field-agentdir"
+                  className="mc-input mono"
+                  value={modal.form.agentDir}
+                  onChange={e => updateForm('agentDir', e.target.value)}
+                  placeholder="/caminho/do/agente"
+                />
+              </div>
+            </div>
+
+            <div className="mc-modal-footer">
+              <button className="mc-btn mc-btn-secondary" onClick={() => setModal(null)} disabled={saving}>
+                {t('Cancelar')}
+              </button>
+              <button className="mc-btn mc-btn-primary" onClick={saveAgent} disabled={saving}>
+                {saving ? t('Salvando...') : t('Salvar')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -85,8 +218,8 @@ export default function AgentesPage() {
         <h1 className="mc-agentes-title">{t("Gerenciar Agentes")}</h1>
         <button
           className="mc-btn mc-btn-primary"
-          onClick={() => showToast(t("Funcionalidade em desenvolvimento"))}
-          onKeyDown={(e) => { if (e.key === 'Enter') showToast(t("Funcionalidade em desenvolvimento")); }}
+          onClick={openNew}
+          onKeyDown={(e) => { if (e.key === 'Enter') openNew(); }}
         >
           + {t("Novo Agente")}
         </button>
@@ -134,7 +267,7 @@ export default function AgentesPage() {
                     <td>
                       <button
                         className="mc-btn mc-btn-secondary mc-btn-sm"
-                        onClick={() => showToast(t("Edição em desenvolvimento"))}
+                        onClick={() => openEdit(agent)}
                       >
                         {t("Editar")}
                       </button>
@@ -264,6 +397,88 @@ export default function AgentesPage() {
           .mc-agent-table td:nth-child(4) {
             display: none;
           }
+        }
+
+        .mc-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.65);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 999;
+        }
+
+        .mc-modal {
+          background: var(--mc-bg-surface);
+          border: 1px solid var(--mc-border);
+          border-radius: 4px;
+          width: 100%;
+          max-width: 480px;
+          max-height: 90vh;
+          overflow-y: auto;
+          margin: 16px;
+        }
+
+        .mc-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-bottom: 1px solid var(--mc-border);
+        }
+
+        .mc-modal-title {
+          font-size: 16px;
+          font-weight: 700;
+        }
+
+        .mc-modal-close {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--mc-text-muted);
+          font-size: 16px;
+          padding: 4px 8px;
+          line-height: 1;
+        }
+
+        .mc-modal-close:hover {
+          color: var(--mc-text-primary);
+        }
+
+        .mc-modal-body {
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .mc-form-field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .mc-label {
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--mc-text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+
+        .mc-modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          padding: 16px 20px;
+          border-top: 1px solid var(--mc-border);
+        }
+
+        input:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
       `}</style>
     </div>
